@@ -99,17 +99,30 @@ fun SpicyLyricsView(
                         }
                         dynamicYOffsets = newDynamicYOffsets.toList()
 
-                        // 2. Identify the active line and update the scroll target.
-                        val activeIdx = currentLayouts.indices
-                            .filter { !currentLayouts[it].isBackground }
-                            .lastOrNull { currentLayouts[it].line.startMs <= currentTime }
-                            ?.coerceAtLeast(0) ?: 0
+                        // 2. Identify all active lines and update the scroll target to center on them.
+                        val activeIndices = currentLayouts.indices
+                            .filter { !currentLayouts[it].isBackground && !currentLayouts[it].isSongwriter }
+                            .filter { currentLines[it].startMs <= currentTime && currentTime <= currentLines[it].endMs }
 
                         var targetY: Float? = null
-                        if (activeIdx < currentLayouts.size) {
-                            val activeLayout = currentLayouts[activeIdx]
-                            val activeDynamicY = newDynamicYOffsets[activeIdx]
-                            targetY = -(activeDynamicY + activeLayout.height / 2f)
+                        if (activeIndices.isNotEmpty()) {
+                            // Calculate the combined Y-range of all active lines.
+                            val minY = activeIndices.minOf { newDynamicYOffsets[it] }
+                            val maxY = activeIndices.maxOf { newDynamicYOffsets[it] + currentLayouts[it].height }
+                            val clusterCenterY = (minY + maxY) / 2f
+                            targetY = -clusterCenterY
+                        } else {
+                            // Fallback: center on the latest line that has already started.
+                            val lastStartedIdx = currentLayouts.indices
+                                .filter { !currentLayouts[it].isBackground && !currentLayouts[it].isSongwriter }
+                                .lastOrNull { currentLines[it].startMs <= currentTime }
+                                ?: 0
+                            
+                            if (lastStartedIdx < currentLayouts.size) {
+                                val fallbackLayout = currentLayouts[lastStartedIdx]
+                                val fallbackDynamicY = newDynamicYOffsets[lastStartedIdx]
+                                targetY = -(fallbackDynamicY + fallbackLayout.height / 2f)
+                            }
                         }
 
                         // 3. Step the scroll spring and handle user overrides.

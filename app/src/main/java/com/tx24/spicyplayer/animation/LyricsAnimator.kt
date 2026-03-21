@@ -151,33 +151,46 @@ class LyricsAnimator(private val coroutineScope: CoroutineScope) {
         }
         lastFrameTimeNanos = frameTimeNanos
 
-        // Determine which line is currently "active" (being sung).
-        // Background and songwriter lines are excluded from being the primary active line.
-        val baseActiveLineIndex = lines.indices
+        // Determine which lines are currently "active" (being sung).
+        // For normal lines, multiple lines can be active (duets).
+        val activeLineIndices = lines.indices
             .filter { !lines[it].isBackground && !lines[it].isSongwriter }
-            .lastOrNull { lines[it].startMs <= currentTimeMs && currentTimeMs <= lines[it].endMs }
-            ?: lines.indices
+            .filter { getElementState(currentTimeMs, lines[it].startMs, lines[it].endMs) == ElementState.Active }
+
+        // Determine the "primary" active line index (the latest one starting before currentTimeMs).
+        // This is used as a fallback for focus and scroll targeting.
+        val primaryActiveLineIndex = if (activeLineIndices.isNotEmpty()) {
+            activeLineIndices.last()
+        } else {
+             lines.indices
                 .filter { !lines[it].isBackground && !lines[it].isSongwriter }
                 .lastOrNull { lines[it].startMs <= currentTimeMs }
-            ?: 0
+                ?: 0
+        }
 
-        // If the active line has already ended more than 1.5s ago, treat it as no active line.
-        val activeLineIndex = if (baseActiveLineIndex >= 0 && lines.isNotEmpty() && lines[baseActiveLineIndex].endMs < currentTimeMs - 1500L) {
+        // If the primary line has already ended more than 1.5s ago, treat focus as neutral.
+        val focusLineIndex = if (primaryActiveLineIndex >= 0 && lines.isNotEmpty() && lines[primaryActiveLineIndex].endMs < currentTimeMs - 1500L) {
             -1
         } else {
-            baseActiveLineIndex
+            primaryActiveLineIndex
         }
 
         // Map each line to its current animated state.
         return lines.mapIndexed { lineIdx, line ->
-            val distance = kotlin.math.abs(lineIdx - activeLineIndex)
+            // Distance is the minimum distance to any currently active non-background line.
+            val distance = if (activeLineIndices.isNotEmpty()) {
+                activeLineIndices.minOf { abs(lineIdx - it) }
+            } else {
+                abs(lineIdx - focusLineIndex)
+            }
+            
             val lineState = getElementState(currentTimeMs, line.startMs, line.endMs)
 
-            // A line is considered active if it's the current lineIdx or if it's a background line currently being sung.
+            // A line is considered active if it's currently in the Active state.
             val isActive = if (line.isBackground) {
                 lineState == ElementState.Active
             } else {
-                lineIdx == activeLineIndex && lineState == ElementState.Active
+                lineState == ElementState.Active
             }
 
             // Determine the target opacity based on the line type and state.
@@ -207,8 +220,8 @@ class LyricsAnimator(private val coroutineScope: CoroutineScope) {
             }
             val opacity = animatable.value
 
-            // Compute blur level based on distance from the active line.
-            val blur = if (isActive || distance == 0) {
+            // Compute blur level based on distance from the active line region.
+            val blur = if (isActive || (activeLineIndices.isEmpty() && lineIdx == focusLineIndex)) {
                 0f
             } else {
                 (BLUR_MULTIPLIER * distance).coerceAtMost(MAX_BLUR)
@@ -363,10 +376,13 @@ class LyricsAnimator(private val coroutineScope: CoroutineScope) {
                         }
                         ElementState.Sung -> {
                             if (activeLetterIdx == -1) {
+                                // The whole word is finished singing.
                                 targetScale = scaleSpline.at(1f)
                                 targetYOff = yOffsetSpline.at(1f)
-                                targetGlow = SUNG_LETTER_GLOW
+                                targetGlow = 0f
                             } else {
+                                // Some part of the word is still being sung; maintain a base glow
+                                // but allow the active letter's wave to influence scale/offset.
                                 val activeValScale = scaleSpline.at(activeLetterProgress)
                                 val activeValYOff = yOffsetSpline.at(activeLetterProgress)
                                 val activeValGlow = glowSpline.at(activeLetterProgress)

@@ -15,11 +15,11 @@
     - [x] Canvas smooth scrolling (current line ±1 visible)
     - [x] Line preview (next/prev lines dimmed)
     - [x] Tap word to seek to timestamp
+  - [x] 3 Dots Instrum. Part indicator
+  - [x] Inertia-based scroll
   - [ ] Dynamic Background
   - [ ] Landscape view
-  - [x] 3 Dots Instrum. Part indicator
-  - [x] Fix held word animation
-  - [x] Inertia-based scroll
+  - [ ] Fix held word animation
 - Audio player aspect
   - [x] ExoPlayer
     - [x] Set up ExoPlayer with `androidx.media3:media3-exoplayer` and `androidx.media3:media3-flac`

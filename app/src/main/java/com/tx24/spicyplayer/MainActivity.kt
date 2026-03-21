@@ -154,34 +154,6 @@ fun SpicyPlayerApp(audioPlayer: AudioPlayer) {
                         modifier = Modifier.size(48.dp).padding(end = 12.dp)
                     )
                     Text("Spicy Player", color = Color.White, style = MaterialTheme.typography.headlineSmall)
-                    
-                    Spacer(modifier = Modifier.weight(1f))
-                    
-                    Button(onClick = {
-                        coroutineScope.launch {
-                            try {
-                                // Find any .ttml and .flac in the Music directory for testing.
-                                // TODO: Implement a proper file picker.
-                                val musicDir = File("/sdcard/Music/")
-                                val files = musicDir.listFiles() ?: emptyArray()
-                                
-                                val ttmlFile = files.firstOrNull { it.name.endsWith(".ttml", ignoreCase = true) }
-                                if (ttmlFile != null && ttmlFile.exists()) {
-                                    lines = TtmlLyricsParser.parse(ttmlFile.inputStream()).lines
-                                }
-                                
-                                val flacFile = files.firstOrNull { it.name.endsWith(".flac", ignoreCase = true) }
-                                if (flacFile != null && flacFile.exists()) {
-                                    audioPlayer.preparePlaylist(listOf(flacFile.absolutePath))
-                                    isPlaying = true
-                                }
-                            } catch (e: Exception) {
-                                e.printStackTrace()
-                            }
-                        }
-                    }) {
-                        Text("Scan Ext")
-                    }
                 }
                 
                 // The main lyrics display area.
@@ -212,6 +184,34 @@ fun SpicyPlayerApp(audioPlayer: AudioPlayer) {
                         }
                     }) {
                         Text(if (isPlaying) "Pause" else "Play")
+                    }
+
+                    Spacer(modifier = Modifier.weight(1f))
+                    
+                    Button(onClick = {
+                        coroutineScope.launch {
+                            try {
+                                // Find any .ttml and .flac in the Music directory for testing.
+                                // TODO: Implement a proper file picker.
+                                val musicDir = File("/sdcard/Music/")
+                                val files = musicDir.listFiles() ?: emptyArray()
+                                
+                                val ttmlFile = files.firstOrNull { it.name.endsWith(".ttml", ignoreCase = true) }
+                                if (ttmlFile != null && ttmlFile.exists()) {
+                                    lines = TtmlLyricsParser.parse(ttmlFile.inputStream()).lines
+                                }
+                                
+                                val flacFile = files.firstOrNull { it.name.endsWith(".flac", ignoreCase = true) }
+                                if (flacFile != null && flacFile.exists()) {
+                                    audioPlayer.preparePlaylist(listOf(flacFile.absolutePath))
+                                    isPlaying = true
+                                }
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            }
+                        }
+                    }) {
+                        Text("Scan Ext")
                     }
                 }
             }
