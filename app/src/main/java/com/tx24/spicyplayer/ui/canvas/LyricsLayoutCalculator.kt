@@ -24,11 +24,24 @@ internal object LyricsLayoutCalculator {
         Font(R.font.lyrics_bold, FontWeight.Bold)
     )
 
+    private fun isCjk(c: Char): Boolean {
+        val block = Character.UnicodeBlock.of(c)
+        return block == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS ||
+            block == Character.UnicodeBlock.CJK_COMPATIBILITY_IDEOGRAPHS ||
+            block == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS_EXTENSION_A ||
+            block == Character.UnicodeBlock.HIRAGANA ||
+            block == Character.UnicodeBlock.KATAKANA ||
+            block == Character.UnicodeBlock.HANGUL_SYLLABLES ||
+            block == Character.UnicodeBlock.HANGUL_JAMO ||
+            block == Character.UnicodeBlock.HANGUL_COMPATIBILITY_JAMO
+    }
+
     fun calculateLineLayouts(
         lines: List<Line>,
         canvasWidth: Float,
         textMeasurer: TextMeasurer
     ): List<LineLayout> {
+
         val layouts = mutableListOf<LineLayout>()
         var currentY = 0f
         val lineSpacing = 32f
@@ -98,45 +111,74 @@ internal object LyricsLayoutCalculator {
             ).size.width.toFloat()
             val wordGap = spaceWidth
 
-            val measuredWords = line.words.mapIndexed { wIdx, word ->
-                val result = textMeasurer.measure(
-                    text = AnnotatedString(word.text),
-                    style = TextStyle(
-                        fontFamily = spicyFontFamily,
-                        fontSize = fontSize,
-                        fontWeight = if (line.isSongwriter) FontWeight.Normal else mainFontWeight,
-                        color = Color.White,
-                        letterSpacing = (wIdx * 0.001f).sp
-                    )
+            data class Piece(
+                val word: Word,
+                val text: String,
+                val layout: androidx.compose.ui.text.TextLayoutResult,
+                val sourceIdx: Int,
+                val charIdx: Int,
+                val fullWidth: Float,
+                val startX: Float,
+                val isCjkPiece: Boolean,
+                val isPartOfWord: Boolean
+            )
+
+            val pieces = mutableListOf<Piece>()
+            for (wIdx in line.words.indices) {
+                val word = line.words[wIdx]
+                val style = TextStyle(
+                    fontFamily = spicyFontFamily,
+                    fontSize = fontSize,
+                    fontWeight = if (line.isSongwriter) FontWeight.Normal else mainFontWeight,
+                    color = Color.White,
+                    letterSpacing = (wIdx * 0.001f).sp
                 )
-                val characterLayouts = if (word.isLetterGroup) {
-                    word.text.mapIndexed { idx, _ ->
-                        val charStyle = TextStyle(
-                            fontFamily = spicyFontFamily,
-                            fontSize = fontSize,
-                            fontWeight = if (line.isSongwriter) FontWeight.Normal else mainFontWeight,
-                            color = Color.White,
-                            letterSpacing = (wIdx * 0.001f).sp
-                        )
-                        
-                        textMeasurer.measure(
-                            text = word.text[idx].toString(),
-                            style = charStyle
-                        )
+                
+                val fullResult = textMeasurer.measure(word.text, style)
+                val fullW = fullResult.size.width.toFloat()
+                
+                if (word.text.any { isCjk(it) } || word.isLetterGroup) {
+                    var currentX = 0f
+                    for (charIdx in word.text.indices) {
+                        val charText = word.text[charIdx].toString()
+                        val charResult = textMeasurer.measure(charText, style)
+                        pieces.add(Piece(
+                            word = word,
+                            text = charText,
+                            layout = charResult,
+                            sourceIdx = wIdx,
+                            charIdx = charIdx,
+                            fullWidth = fullW,
+                            startX = currentX,
+                            isCjkPiece = isCjk(word.text[charIdx]),
+                            isPartOfWord = charIdx > 0 || word.isPartOfWord
+                        ))
+                        currentX += charResult.size.width
                     }
-                } else emptyList()
-                Triple(word, result, characterLayouts)
+                } else {
+                    pieces.add(Piece(
+                        word = word,
+                        text = word.text,
+                        layout = fullResult,
+                        sourceIdx = wIdx,
+                        charIdx = 0,
+                        fullWidth = fullW,
+                        startX = 0f,
+                        isCjkPiece = false,
+                        isPartOfWord = word.isPartOfWord
+                    ))
+                }
             }
 
-            // Word-wrapping logic.
+            // Word-wrapping logic on pieces.
             val isSongwriterLine = line.isSongwriter
             var R = 1
             var currentW = 0f
             val lineMaxWidth = if (isSongwriterLine) canvasWidth - (horizontalPadding * 2) else maxLineWidth
             
-            for (i in measuredWords.indices) {
-                val w = measuredWords[i].second.size.width.toFloat()
-                val hspace = if (currentW > 0f && !measuredWords[i].first.isPartOfWord) wordGap else 0f
+            for (i in pieces.indices) {
+                val w = pieces[i].layout.size.width.toFloat()
+                val hspace = if (currentW > 0f && !pieces[i].isPartOfWord) wordGap else 0f
                 if (currentW + hspace + w > lineMaxWidth && currentW > 0f) {
                     R++
                     currentW = w
@@ -145,7 +187,7 @@ internal object LyricsLayoutCalculator {
                 }
             }
 
-            val numWords = measuredWords.size
+            val numPieces = pieces.size
             val lineBreaks = mutableListOf<Int>()
             
             if (!hasDuet || isSongwriterLine) {
@@ -155,11 +197,19 @@ internal object LyricsLayoutCalculator {
                 lineBreaks.add(0)
                 
                 var i = 0
-                while (i < numWords) {
-                    val wordW = measuredWords[i].second.size.width.toFloat()
-                    val hspace = if (currentLineW > 0f && !measuredWords[i].first.isPartOfWord) wordGap else 0f
+                while (i < numPieces) {
+                    val piece = pieces[i]
+                    val prevPiece = if (i > 0) pieces[i - 1] else null
+                    val wordW = piece.layout.size.width.toFloat()
+                    val hspace = if (currentLineW > 0f && !piece.isPartOfWord) wordGap else 0f
                     
-                    val isForcedSyllable = i > 0 && measuredWords[i].first.isPartOfWord && !measuredWords[i - 1].first.text.endsWith("-")
+                    val isCjkBoundary = if (i > 0 && prevPiece != null) {
+                        (isCjk(prevPiece.text.lastOrNull() ?: ' ')) || (isCjk(piece.text.firstOrNull() ?: ' '))
+                    } else false
+
+                    val isForcedSyllable = i > 0 && piece.isPartOfWord && 
+                                           !(prevPiece?.text?.endsWith("-") == true) && !isCjkBoundary
+                                           
                     if (!isForcedSyllable) {
                         lastBreakCandidate = i
                     }
@@ -174,30 +224,39 @@ internal object LyricsLayoutCalculator {
                         i++
                     }
                 }
-                lineBreaks.add(numWords)
+                lineBreaks.add(numPieces)
             } else {
                 // Balanced wrap using dynamic programming.
-                val dp = IntArray(numWords + 1) { Int.MAX_VALUE / 2 }
-                val breaks = IntArray(numWords + 1)
+                val dp = IntArray(numPieces + 1) { Int.MAX_VALUE / 2 }
+                val breaks = IntArray(numPieces + 1)
                 dp[0] = 0
 
-                val targetWordCount = numWords.toFloat() / R
+                val targetWordCount = numPieces.toFloat() / R
 
-                for (i in 1..numWords) {
+                for (i in 1..numPieces) {
                     var w = 0f
                     var j = i - 1
                     while (j >= 0) {
-                        val wordW = measuredWords[j].second.size.width.toFloat()
-                        val hspace = if (j < i - 1 && !measuredWords[j + 1].first.isPartOfWord) wordGap else 0f
+                        val piece = pieces[j]
+                        val nextPiece = if (j < numPieces - 1) pieces[j + 1] else null
+                        val wordW = piece.layout.size.width.toFloat()
+                        val hspace = if (j < i - 1 && nextPiece != null && !nextPiece.isPartOfWord) wordGap else 0f
                         w += wordW + hspace
                         if (w > lineMaxWidth && i - j > 1) {
                             break
                         }
                         
-                        val isForcedSyllableBreak = j > 0 && measuredWords[j].first.isPartOfWord && !measuredWords[j - 1].first.text.endsWith("-")
+                        val isCjkBoundary = if (j > 0) {
+                            val curP = piece
+                            val prevP = pieces[j - 1]
+                            (isCjk(prevP.text.lastOrNull() ?: ' ')) || (isCjk(curP.text.firstOrNull() ?: ' '))
+                        } else false
+
+                        val isForcedSyllableBreak = j > 0 && piece.isPartOfWord && 
+                                                    !(pieces[j-1].text.endsWith("-")) && !isCjkBoundary
                         
-                        val wordsInLine = i - j
-                        val variancePenalty = kotlin.math.abs(wordsInLine - targetWordCount)
+                        val piecesInLine = i - j
+                        val variancePenalty = kotlin.math.abs(piecesInLine - targetWordCount)
                         val penalty = if (isForcedSyllableBreak) {
                             Int.MAX_VALUE / 2
                         } else {
@@ -212,13 +271,14 @@ internal object LyricsLayoutCalculator {
                     }
                 }
 
-                var curr = numWords
+                var curr = numPieces
                 while (curr > 0) {
                     lineBreaks.add(0, curr)
                     curr = breaks[curr]
                 }
                 lineBreaks.add(0, 0)
             }
+
 
             // Assemble WordLayouts into rows.
             val wordLayouts = mutableListOf<WordLayout>()
@@ -230,18 +290,43 @@ internal object LyricsLayoutCalculator {
             for (b in 0 until lineBreaks.size - 1) {
                 val startIdx = lineBreaks[b]
                 val endIdx = lineBreaks[b+1]
-                var rowX = 0f
-                rowHeight = 0f
+                
+                var maxBaseline = 0f
                 for (idx in startIdx until endIdx) {
-                    val (word, result, charLayouts) = measuredWords[idx]
-                    val wordWidth = result.size.width.toFloat()
-                    val actualGap = if (rowX > 0f && !word.isPartOfWord) wordGap else 0f
-                    wordLayouts.add(WordLayout(word, result, Offset(rowX + actualGap, rowY), charLayouts))
-                    rowX += wordWidth + actualGap
-                    rowHeight = maxOf(rowHeight, result.size.height.toFloat())
+                    val piece = pieces[idx]
+                    val baseline = piece.layout.firstBaseline
+                    if (!baseline.isNaN()) {
+                        maxBaseline = kotlin.math.max(maxBaseline, baseline)
+                    }
                 }
+
+                var rowMaxBottom = 0f
+                var rowX = 0f
+                for (idx in startIdx until endIdx) {
+                    val piece = pieces[idx]
+                    val pieceWidth = piece.layout.size.width.toFloat()
+                    val actualGap = if (rowX > 0f && !piece.isPartOfWord) wordGap else 0f
+                    
+                    val baseline = piece.layout.firstBaseline
+                    val yShift = if (!baseline.isNaN() && maxBaseline > 0f) maxBaseline - baseline else 0f
+                    
+                    wordLayouts.add(WordLayout(
+                        word = piece.word,
+                        textLayoutResult = piece.layout,
+                        relativeOffset = Offset(rowX + actualGap, rowY + yShift),
+                        sourceWordIndex = piece.sourceIdx,
+                        charIndex = piece.charIdx,
+                        fullWordWidth = piece.fullWidth,
+                        startXOffset = piece.startX
+                    ))
+                    rowX += pieceWidth + actualGap
+                    rowMaxBottom = kotlin.math.max(rowMaxBottom, yShift + piece.layout.size.height.toFloat())
+                }
+                
                 rowWidths[rowY] = rowX
                 maxRowWidth = maxOf(maxRowWidth, rowX)
+                rowHeight = rowMaxBottom
+                
                 if (b < lineBreaks.size - 2) {
                     rowY += rowHeight
                 }

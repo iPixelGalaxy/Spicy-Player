@@ -150,14 +150,18 @@ fun SpicyPlayerApp(audioPlayer: AudioPlayer) {
                     Button(onClick = {
                         coroutineScope.launch {
                             try {
-                                // Hardcoded paths for testing.
+                                // Find any .ttml and .flac in the Music directory for testing.
                                 // TODO: Implement a proper file picker.
-                                val ttmlFile = File("/sdcard/Music/test.ttml")
-                                if (ttmlFile.exists()) {
+                                val musicDir = File("/sdcard/Music/")
+                                val files = musicDir.listFiles() ?: emptyArray()
+                                
+                                val ttmlFile = files.firstOrNull { it.name.endsWith(".ttml", ignoreCase = true) }
+                                if (ttmlFile != null && ttmlFile.exists()) {
                                     lines = TtmlLyricsParser.parse(ttmlFile.inputStream()).lines
                                 }
-                                val flacFile = File("/sdcard/Music/test.flac")
-                                if (flacFile.exists()) {
+                                
+                                val flacFile = files.firstOrNull { it.name.endsWith(".flac", ignoreCase = true) }
+                                if (flacFile != null && flacFile.exists()) {
                                     audioPlayer.preparePlaylist(listOf(flacFile.absolutePath))
                                     isPlaying = true
                                 }

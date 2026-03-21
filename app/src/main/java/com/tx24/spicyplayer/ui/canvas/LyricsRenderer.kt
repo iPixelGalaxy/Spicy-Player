@@ -74,8 +74,8 @@ internal fun DrawScope.drawStandardLine(
     scrollOffset: Float,
     dynamicY: Float
 ) {
-    layout.words.forEachIndexed { wordIdx, wLayout ->
-        val wordAnim = lineAnim.wordStates.getOrNull(wordIdx) ?: return@forEachIndexed
+    layout.words.forEachIndexed { _, wLayout ->
+        val wordAnim = lineAnim.wordStates.getOrNull(wLayout.sourceWordIndex) ?: return@forEachIndexed
 
         val xPos = lineStartX + wLayout.relativeOffset.x
         val yPos = dynamicY + wLayout.relativeOffset.y
@@ -86,15 +86,32 @@ internal fun DrawScope.drawStandardLine(
         val baseBright = LyricsAnimator.GRADIENT_ALPHA_BRIGHT
         val baseDim = LyricsAnimator.GRADIENT_ALPHA_DIM
 
-        if (wordAnim.isLetterGroup && wordAnim.letterStates.size == wLayout.word.text.length) {
-            drawSyllabicLetterGroup(wLayout, wordAnim, lineAnim, xPos, yPos, textWidth, textHeight, scrollOffset, baseBright, baseDim)
+        if (wordAnim.isLetterGroup) {
+            // Find the character index of this fragment within the original word.
+            // Since we split into 1-char pieces for letter groups, we can find it by text offset.
+            // (Note: in more complex cases we'd store charIndex in WordLayout, but here startXOffset helps)
+            // For now, let's find it by matching the text if possible, or just use startXOffset logic.
+            
+            // A safer way: our calculator split into 1-char pieces for letterGroups.
+            // So this fragment is exactly one character.
+            // We can determine WHICH character by looking at startXOffset vs individual char widths...
+            // Or better, let's just assume it's one char for now as per our calculator logic.
+            val charIdx = wLayout.word.text.indexOf(wLayout.textLayoutResult.layoutInput.text.text) 
+            // wait, that's not safe if chars repeat. 
+            // In calculateLineLayouts I should have stored the char index!
+            
+            // Re-evaluating: let's use the simplest logic that works for the current calculator.
+            // The calculator uses 1-char pieces for isLetterGroup.
+            // I'll update the calculator to provide the char index or just use the highlight logic.
+            
+            drawSyllabicLetterFragment(wLayout, wordAnim, lineAnim, xPos, yPos, textWidth, textHeight, scrollOffset, baseBright, baseDim)
         } else {
             drawStandardWord(wLayout, wordAnim, lineAnim, xPos, yPos, textWidth, textHeight, scrollOffset, baseBright, baseDim)
         }
     }
 }
 
-private fun DrawScope.drawSyllabicLetterGroup(
+private fun DrawScope.drawSyllabicLetterFragment(
     wLayout: WordLayout,
     wordAnim: com.tx24.spicyplayer.animation.WordAnimState,
     lineAnim: LineAnimState,
@@ -106,69 +123,49 @@ private fun DrawScope.drawSyllabicLetterGroup(
     baseBright: Float,
     baseDim: Float
 ) {
-    val textLen = wLayout.word.text.length
-    for (li in 0 until textLen) {
-        val lState = wordAnim.letterStates[li]
-        val rect = wLayout.textLayoutResult.getBoundingBox(li)
+    val lState = wordAnim.letterStates.getOrNull(wLayout.charIndex) ?: return
+    
+    val sLYPos = yPos + scrollOffset
+    val sPivotX = xPos + textWidth / 2f
+    val sPivotY = sLYPos + textHeight / 2f
+    val lYShift = lState.yOffset * textHeight * 2f
 
-        val lXPos = xPos + rect.left
-        val lYPos = yPos + rect.top
-        val lWidth = rect.width
-        val lHeight = rect.height
+    val lGlowBlur = 4f + 12f * lState.glow
+    val lGlowOpacity = (lState.glow * LyricsAnimator.LETTER_GLOW_MULTIPLIER_OPACITY).coerceIn(0f, 1f)
+    val lShadow = if (lGlowOpacity > 0.02f) Shadow(
+        color = Color.White.copy(alpha = lGlowOpacity * lineAnim.opacity),
+        blurRadius = lGlowBlur,
+    ) else null
 
-        val sLYPos = lYPos + scrollOffset
-        val sPivotX = lXPos + lWidth / 2f
-        val sPivotY = sLYPos + lHeight / 2f
-        val lYShift = lState.yOffset * textHeight * 2f
+    val brightAlpha = (baseDim + (baseBright - baseDim) * wordAnim.activeAnimFactor) * lineAnim.opacity
+    val dimAlpha = baseDim * lineAnim.opacity
+    val gradientFraction = ((lState.gradientPosition + 20f) / 120f).coerceIn(0f, 1f)
 
-        val lGlowBlur = 4f + 12f * lState.glow
-        val lGlowOpacity = (lState.glow * LyricsAnimator.LETTER_GLOW_MULTIPLIER_OPACITY).coerceIn(0f, 1f)
-        val lShadow = if (lGlowOpacity > 0.02f) Shadow(
-            color = Color.White.copy(alpha = lGlowOpacity * lineAnim.opacity),
-            blurRadius = lGlowBlur,
-        ) else null
+    withTransform({
+        scale(lState.scale, lState.scale, Offset(sPivotX, sPivotY))
+        translate(top = lYShift)
+    }) {
+        // Base layer
+        drawText(
+            textLayoutResult = wLayout.textLayoutResult,
+            color = Color.White,
+            alpha = dimAlpha.coerceIn(0f, 1f),
+            topLeft = Offset(xPos, yPos + scrollOffset),
+        )
 
-        val brightAlpha = (baseDim + (baseBright - baseDim) * wordAnim.activeAnimFactor) * lineAnim.opacity
-        val dimAlpha = baseDim * lineAnim.opacity
-        val gradientFraction = ((lState.gradientPosition + 20f) / 120f).coerceIn(0f, 1f)
+        // Highlight layer
+        if (brightAlpha > dimAlpha + 0.01f && gradientFraction > 0.001f) {
+            val overlayAlpha = if (dimAlpha < 1f) {
+                ((brightAlpha - dimAlpha) / (1f - dimAlpha)).coerceIn(0f, 1f)
+            } else 0f
 
-        withTransform({
-            scale(lState.scale, lState.scale, Offset(sPivotX, sPivotY))
-            translate(top = lYShift)
-        }) {
-            // Clipped base layer
-            clipRect(
-                left = lXPos - 2f,
-                top = sLYPos - lHeight * 0.75f,
-                right = lXPos + lWidth + 2f,
-                bottom = sLYPos + lHeight * 1.75f,
-            ) {
-                drawText(
-                    textLayoutResult = wLayout.textLayoutResult,
-                    color = Color.White,
-                    alpha = dimAlpha.coerceIn(0f, 1f),
-                    topLeft = Offset(xPos, yPos + scrollOffset),
-                )
-            }
-
-            // Unclipped (or widely clipped) highlight layer for glowing shadow
-            if (brightAlpha > dimAlpha + 0.01f && gradientFraction > 0.001f) {
-                val charResult = wLayout.characterLayouts.getOrNull(li)
-                
-                val overlayAlpha = if (dimAlpha < 1f) {
-                    ((brightAlpha - dimAlpha) / (1f - dimAlpha)).coerceIn(0f, 1f)
-                } else 0f
-
-                if (charResult != null) {
-                    val finalAlpha = (overlayAlpha * gradientFraction).coerceIn(0f, 1f)
-                    drawText(
-                        textLayoutResult = charResult,
-                        alpha = finalAlpha,
-                        shadow = lShadow,
-                        topLeft = Offset(xPos + rect.left, yPos + scrollOffset),
-                    )
-                }
-            }
+            val finalAlpha = (overlayAlpha * gradientFraction).coerceIn(0f, 1f)
+            drawText(
+                textLayoutResult = wLayout.textLayoutResult,
+                alpha = finalAlpha,
+                shadow = lShadow,
+                topLeft = Offset(xPos, yPos + scrollOffset),
+            )
         }
     }
 }
@@ -205,7 +202,11 @@ private fun DrawScope.drawStandardWord(
         translate(top = wordYShift)
     }) {
         val gradientFraction = ((wordAnim.gradientPosition + 20f) / 120f).coerceIn(0f, 1f)
-        val clipX = xPos + textWidth * gradientFraction
+        
+        // Calculate the highlight edge based on the FULL word width.
+        val fullWordXHighlight = wLayout.fullWordWidth * gradientFraction
+        // Adjust for this fragment's local start position within the full word.
+        val fragmentXHighlight = fullWordXHighlight - wLayout.startXOffset
 
         val brightAlpha = (baseDim + (baseBright - baseDim) * wordAnim.activeAnimFactor) * lineAnim.opacity
         val dimAlpha = baseDim * lineAnim.opacity
@@ -217,17 +218,17 @@ private fun DrawScope.drawStandardWord(
             topLeft = Offset(xPos, yPos),
         )
 
-        if (brightAlpha > dimAlpha + 0.01f && gradientFraction > 0.001f) {
-            val edgeSoftness = 0.15f
-            val startFade = maxOf(0f, gradientFraction - edgeSoftness / 2f)
-            val endFade = minOf(1f, gradientFraction + edgeSoftness / 2f)
+        if (brightAlpha > dimAlpha + 0.01f && wordAnim.activeAnimFactor > 0.001f) {
+            val edgeSoftnessInPixels = textHeight * 0.5f // Use pixels for softness
+            val startFade = fragmentXHighlight - edgeSoftnessInPixels / 2f
+            val endFade = fragmentXHighlight + edgeSoftnessInPixels / 2f
             
             val highlightColor = Color.White
             val gradientBrush = Brush.horizontalGradient(
                 0f to highlightColor,
-                startFade to highlightColor,
-                endFade to Color.Transparent,
-                1f to Color.Transparent,
+                maxOf(0f, startFade) to highlightColor,
+                minOf(textWidth, endFade) to Color.Transparent,
+                textWidth to Color.Transparent,
                 startX = 0f,
                 endX = textWidth
             )
@@ -236,7 +237,6 @@ private fun DrawScope.drawStandardWord(
                 ((brightAlpha - dimAlpha) / (1f - dimAlpha)).coerceIn(0f, 1f)
             } else 0f
 
-            // No clipRect needed since the brush handles horizontal masking beautifully at 0f locally
             drawText(
                 textLayoutResult = wLayout.textLayoutResult,
                 brush = gradientBrush,

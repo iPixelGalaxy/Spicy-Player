@@ -12,7 +12,15 @@ internal data class WordLayout(
     val word: Word,
     val textLayoutResult: TextLayoutResult,
     val relativeOffset: Offset,
-    val characterLayouts: List<TextLayoutResult> = emptyList()
+    val characterLayouts: List<TextLayoutResult> = emptyList(),
+    /** Index of the original word in the Line.words list. */
+    val sourceWordIndex: Int = -1,
+    /** Index of the character offset within the original word. */
+    val charIndex: Int = 0,
+    /** Original total width of the word (including all fragments). */
+    val fullWordWidth: Float = 0f,
+    /** Horizontal start position of this fragment within the full word. */
+    val startXOffset: Float = 0f
 )
 
 /**
