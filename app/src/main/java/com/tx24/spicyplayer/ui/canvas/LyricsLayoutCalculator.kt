@@ -284,11 +284,10 @@ internal object LyricsLayoutCalculator {
 
 
             // Assemble WordLayouts into rows.
-            val wordLayouts = mutableListOf<WordLayout>()
-            var rowY = 0f
+            val allRows = mutableListOf<Pair<Float, List<WordLayout>>>()
+            var currentRowY = 0f
             var maxRowWidth = 0f
-            var rowHeight = 0f
-            val rowWidths = mutableMapOf<Float, Float>()
+            var lastRowHeight = 0f
 
             for (b in 0 until lineBreaks.size - 1) {
                 val startIdx = lineBreaks[b]
@@ -303,6 +302,7 @@ internal object LyricsLayoutCalculator {
                     }
                 }
 
+                val rowPieces = mutableListOf<WordLayout>()
                 var rowMaxBottom = 0f
                 var rowX = 0f
                 for (idx in startIdx until endIdx) {
@@ -313,10 +313,10 @@ internal object LyricsLayoutCalculator {
                     val baseline = piece.layout.firstBaseline
                     val yShift = if (!baseline.isNaN() && maxBaseline > 0f) maxBaseline - baseline else 0f
                     
-                    wordLayouts.add(WordLayout(
+                    rowPieces.add(WordLayout(
                         word = piece.word,
                         textLayoutResult = piece.layout,
-                        relativeOffset = Offset(rowX + actualGap, rowY + yShift),
+                        relativeOffset = Offset(rowX + actualGap, currentRowY + yShift),
                         sourceWordIndex = piece.sourceIdx,
                         charIndex = piece.charIdx,
                         fullWordWidth = piece.fullWidth,
@@ -326,28 +326,29 @@ internal object LyricsLayoutCalculator {
                     rowMaxBottom = kotlin.math.max(rowMaxBottom, yShift + piece.layout.size.height.toFloat())
                 }
                 
-                rowWidths[rowY] = rowX
+                allRows.add(rowX to rowPieces)
                 maxRowWidth = maxOf(maxRowWidth, rowX)
-                rowHeight = rowMaxBottom
+                lastRowHeight = rowMaxBottom
                 
                 if (b < lineBreaks.size - 2) {
-                    rowY += rowHeight
+                    currentRowY += lastRowHeight
                 }
             }
             
-            // Handle right-alignment for duet parts.
+            val totalHeight = currentRowY + lastRowHeight
+            val totalWidth = maxRowWidth
+
+            // Apply alignment and flatten.
             val isRightAligned = hasDuet && !line.oppositeAligned && !line.isSongwriter
-            if (isRightAligned) {
-                for (j in wordLayouts.indices) {
-                    val wLayout = wordLayouts[j]
-                    val rWidth = rowWidths[wLayout.relativeOffset.y] ?: maxRowWidth
-                    val alignmentShift = maxRowWidth - rWidth
-                    wordLayouts[j] = wLayout.copy(relativeOffset = Offset(wLayout.relativeOffset.x + alignmentShift, wLayout.relativeOffset.y))
+            val wordLayouts = mutableListOf<WordLayout>()
+            for ((rWidth, rowPieces) in allRows) {
+                val alignmentShift = if (isRightAligned) maxRowWidth - rWidth else 0f
+                for (wLayout in rowPieces) {
+                    wordLayouts.add(wLayout.copy(
+                        relativeOffset = Offset(wLayout.relativeOffset.x + alignmentShift, wLayout.relativeOffset.y)
+                    ))
                 }
             }
-
-            val totalHeight = rowY + rowHeight
-            val totalWidth = maxRowWidth
             
             val drawY = if (isBg) currentY - 32f else if (line.isSongwriter) currentY + lineSpacing * 0.5f else currentY
 

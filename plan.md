@@ -19,7 +19,7 @@
   - [ ] Landscape view
   - [x] 3 Dots Instrum. Part indicator
   - [x] Fix held word animation
-  - [ ] Inertia-based scroll
+  - [x] Inertia-based scroll
 - Audio player aspect
   - [x] ExoPlayer
     - [x] Set up ExoPlayer with `androidx.media3:media3-exoplayer` and `androidx.media3:media3-flac`
