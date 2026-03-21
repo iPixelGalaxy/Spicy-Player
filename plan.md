@@ -17,7 +17,7 @@
     - [x] Tap word to seek to timestamp
   - [x] 3 Dots Instrum. Part indicator
   - [x] Inertia-based scroll
-  - [ ] Dynamic Background
+  - [x] Dynamic Background
   - [ ] Landscape view
   - [ ] Fix held word animation
 - Audio player aspect

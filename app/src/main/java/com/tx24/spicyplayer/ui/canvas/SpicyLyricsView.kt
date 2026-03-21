@@ -74,7 +74,7 @@ fun SpicyLyricsView(
                     val currentLines = linesUpdated
                     val currentTime = currentTimeMsUpdated
 
-                    if (currentLayouts.isNotEmpty() && currentLines.isNotEmpty()) {
+                    if (currentLayouts.size == currentLines.size && currentLines.isNotEmpty()) {
                         // 1. Step the animator for visual properties (scale, opacity, glow).
                         animStates = animator.animate(currentLines, currentTime, frameTimeNanos)
 
