@@ -131,7 +131,10 @@ internal object LyricsLayoutCalculator {
                     fontSize = fontSize,
                     fontWeight = if (line.isSongwriter) FontWeight.Normal else mainFontWeight,
                     color = Color.White,
-                    letterSpacing = (wIdx * 0.001f).sp
+                    // Use a tiny unique letter spacing based on the Word object's identity.
+                    // This prevents Compose from sharing cached TextLayoutResults (and highlights) 
+                    // between identical words in different lines.
+                    letterSpacing = (System.identityHashCode(word) % 1000 * 0.0000001f).sp
                 )
                 
                 val fullResult = textMeasurer.measure(word.text, style)

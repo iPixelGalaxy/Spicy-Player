@@ -87,23 +87,6 @@ internal fun DrawScope.drawStandardLine(
         val baseDim = LyricsAnimator.GRADIENT_ALPHA_DIM
 
         if (wordAnim.isLetterGroup) {
-            // Find the character index of this fragment within the original word.
-            // Since we split into 1-char pieces for letter groups, we can find it by text offset.
-            // (Note: in more complex cases we'd store charIndex in WordLayout, but here startXOffset helps)
-            // For now, let's find it by matching the text if possible, or just use startXOffset logic.
-            
-            // A safer way: our calculator split into 1-char pieces for letterGroups.
-            // So this fragment is exactly one character.
-            // We can determine WHICH character by looking at startXOffset vs individual char widths...
-            // Or better, let's just assume it's one char for now as per our calculator logic.
-            val charIdx = wLayout.word.text.indexOf(wLayout.textLayoutResult.layoutInput.text.text) 
-            // wait, that's not safe if chars repeat. 
-            // In calculateLineLayouts I should have stored the char index!
-            
-            // Re-evaluating: let's use the simplest logic that works for the current calculator.
-            // The calculator uses 1-char pieces for isLetterGroup.
-            // I'll update the calculator to provide the char index or just use the highlight logic.
-            
             drawSyllabicLetterFragment(wLayout, wordAnim, lineAnim, xPos, yPos, textWidth, textHeight, scrollOffset, baseBright, baseDim)
         } else {
             drawStandardWord(wLayout, wordAnim, lineAnim, xPos, yPos, textWidth, textHeight, scrollOffset, baseBright, baseDim)
