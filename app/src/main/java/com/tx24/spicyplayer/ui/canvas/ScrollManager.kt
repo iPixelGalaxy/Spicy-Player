@@ -23,6 +23,9 @@ internal class ScrollManager(
     var animScrollY by mutableFloatStateOf(0f)
         private set
 
+    private var scrollVelocity by mutableFloatStateOf(0f)
+    private var lastDragTimeMs by mutableLongStateOf(0L)
+
     fun updateScroll(
         currentTime: Long,
         dt: Float,
@@ -52,11 +55,25 @@ internal class ScrollManager(
         val timeSinceInteraction = System.currentTimeMillis() - lastInteractionTimeMs
         
         if (!isUserScrolling) {
+            // Apply inertia if there is remaining velocity.
+            if (abs(scrollVelocity) > 0.1f) {
+                userScrollOffset += scrollVelocity * dt
+                // Friction / Decay
+                scrollVelocity *= 0.95f 
+                if (abs(scrollVelocity) < 10f) scrollVelocity = 0f
+                
+                // While moving with inertia, keep the interaction timer fresh.
+                lastInteractionTimeMs = System.currentTimeMillis()
+            }
+
+            val totalScroll = actualSpringY + userScrollOffset
             // Clamp scroll and slowly decay user offset to return to auto-scroll.
             if (totalScroll > maxScrollDown) {
-                userScrollOffset += (maxScrollDown - totalScroll) * 0.1f
+                userScrollOffset += (maxScrollDown - totalScroll) * 0.15f
+                scrollVelocity = 0f
             } else if (totalScroll < maxScrollUp) {
-                userScrollOffset += (maxScrollUp - totalScroll) * 0.1f
+                userScrollOffset += (maxScrollUp - totalScroll) * 0.15f
+                scrollVelocity = 0f
             } else if (isPlaying && timeSinceInteraction > 3000L && userScrollOffset != 0f) {
                 userScrollDecayTimer += dt
                 if (userScrollDecayTimer > 0.5f) {
@@ -68,6 +85,7 @@ internal class ScrollManager(
             }
         } else {
             userScrollDecayTimer = 0f
+            val totalScroll = actualSpringY + userScrollOffset
             // Resistance when scrolling past boundaries.
             if (totalScroll > maxScrollDown) {
                 userScrollOffset += (maxScrollDown - totalScroll) * 0.5f * dt
@@ -82,6 +100,8 @@ internal class ScrollManager(
     fun onDragStart() {
         isUserScrolling = true
         userScrollDecayTimer = 0f
+        scrollVelocity = 0f
+        lastDragTimeMs = System.currentTimeMillis()
     }
 
     fun onDragEnd() {
@@ -90,6 +110,13 @@ internal class ScrollManager(
     }
 
     fun onDrag(dy: Float) {
+        val now = System.currentTimeMillis()
+        val dtSec = (now - lastDragTimeMs) / 1000f
+        if (dtSec > 0) {
+            val instantV = dy / dtSec
+            scrollVelocity = scrollVelocity * 0.4f + instantV * 0.6f
+        }
+        lastDragTimeMs = now
         userScrollOffset += dy
     }
 
