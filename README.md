@@ -3,7 +3,7 @@
 Spicy Player is an offline music player for Android with a port/recreation of [Spicy Lyrics](https://github.com/Spikerko/spicy-lyrics) - A [Spicetify](https://spicetify.app/) Extension, designed to achieve **visual parity** with Spicy Lyrics' rendering. Built using **Jetpack Compose (Canvas API)** and **ExoPlayer**.
 
 > [!WARNING]
-> This is a work in progress. The app is not yet complete and may have bugs. You can find a debug APK of it [here](/app/build/outputs/apk/debug/app-debug.apk).
+> This is a work in progress. The app is not yet complete and may have bugs.
 
 ---
 
