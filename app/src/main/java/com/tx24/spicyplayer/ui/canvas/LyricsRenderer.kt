@@ -87,7 +87,7 @@ internal fun DrawScope.drawStandardLine(
         val baseDim = LyricsAnimator.GRADIENT_ALPHA_DIM
 
         if (wordAnim.isLetterGroup && wordAnim.letterStates.size == wLayout.word.text.length) {
-            drawSyllabicLetterGroup(wLayout, wordAnim, lineAnim, xPos, yPos, textHeight, scrollOffset, baseBright, baseDim)
+            drawSyllabicLetterGroup(wLayout, wordAnim, lineAnim, xPos, yPos, textWidth, textHeight, scrollOffset, baseBright, baseDim)
         } else {
             drawStandardWord(wLayout, wordAnim, lineAnim, xPos, yPos, textWidth, textHeight, scrollOffset, baseBright, baseDim)
         }
@@ -100,6 +100,7 @@ private fun DrawScope.drawSyllabicLetterGroup(
     lineAnim: LineAnimState,
     xPos: Float,
     yPos: Float,
+    textWidth: Float,
     textHeight: Float,
     scrollOffset: Float,
     baseBright: Float,
@@ -153,33 +154,20 @@ private fun DrawScope.drawSyllabicLetterGroup(
             // Unclipped (or widely clipped) highlight layer for glowing shadow
             if (brightAlpha > dimAlpha + 0.01f && gradientFraction > 0.001f) {
                 val charResult = wLayout.characterLayouts.getOrNull(li)
-                val edgeSoftness = 0.15f
-                val startFade = maxOf(0f, gradientFraction - edgeSoftness / 2f)
-                val endFade = minOf(1f, gradientFraction + edgeSoftness / 2f)
-                val highlightColor = Color.White
                 
                 val overlayAlpha = if (dimAlpha < 1f) {
                     ((brightAlpha - dimAlpha) / (1f - dimAlpha)).coerceIn(0f, 1f)
                 } else 0f
 
-                    if (charResult != null) {
-                        val charHighlightBrush = Brush.horizontalGradient(
-                            0f to highlightColor,
-                            startFade to highlightColor,
-                            endFade to Color.Transparent,
-                            1f to Color.Transparent,
-                            startX = rect.left,
-                            endX = rect.right
-                        )
-
-                        drawText(
-                            textLayoutResult = charResult,
-                            brush = charHighlightBrush,
-                            alpha = overlayAlpha,
-                            shadow = lShadow,
-                            topLeft = Offset(xPos, yPos + scrollOffset),
-                        )
-                    }
+                if (charResult != null) {
+                    val finalAlpha = (overlayAlpha * gradientFraction).coerceIn(0f, 1f)
+                    drawText(
+                        textLayoutResult = charResult,
+                        alpha = finalAlpha,
+                        shadow = lShadow,
+                        topLeft = Offset(xPos + rect.left, yPos + scrollOffset),
+                    )
+                }
             }
         }
     }

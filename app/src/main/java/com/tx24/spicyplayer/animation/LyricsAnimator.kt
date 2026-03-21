@@ -94,10 +94,12 @@ class LyricsAnimator(private val coroutineScope: CoroutineScope) {
         const val GRADIENT_ALPHA_BRIGHT = 0.85f
         const val GRADIENT_ALPHA_DIM = 0.35f
 
-        /** Multiplier for letter glow opacity, ported from spicy-lyrics (185%). */
-        const val LETTER_GLOW_MULTIPLIER_OPACITY = 1.85f
+        /** Multiplier for letter glow opacity */
+        const val LETTER_GLOW_MULTIPLIER_OPACITY = 0.9f
         /** Default glow level for already sung letters. */
-        const val SUNG_LETTER_GLOW = 0.2f
+        const val SUNG_LETTER_GLOW = 0.4f
+        /** Time offset in ms applied per letter of distance for the wave stagger effect. */
+        const val LETTER_STAGGER_MS = 80f
     }
 
 
@@ -359,7 +361,7 @@ class LyricsAnimator(private val coroutineScope: CoroutineScope) {
                         if (activeLetterIdx == -1) {
                             targetScale = scaleSpline.at(1f)
                             targetYOff  = yOffsetSpline.at(1f)
-                            targetGlow  = glowSpline.at(SUNG_LETTER_GLOW)
+                            targetGlow  = SUNG_LETTER_GLOW
                         } else {
                             val activeValScale = scaleSpline.at(activeLetterProgress)
                             val activeValYOff  = yOffsetSpline.at(activeLetterProgress)

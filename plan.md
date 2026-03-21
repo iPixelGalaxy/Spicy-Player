@@ -18,17 +18,20 @@
   - [ ] Dynamic Background
   - [ ] Landscape view
   - [x] 3 Dots Instrum. Part indicator
+  - [ ] Fix held word animation
 - Audio player aspect
   - [x] ExoPlayer
     - [x] Set up ExoPlayer with `androidx.media3:media3-exoplayer` and `androidx.media3:media3-flac`
   - [ ] Folder scanner + auto-pairing
     - [ ] Implement file picker to scan `/Music/` directory
     - [ ] Auto-pair `.flac` and `.ttml` files based on name
-  - [ ] Spectrum viz + controls
-    - [ ] Add ExoPlayer controls to Bottom bar
-    - [ ] Implement FFT Spectrum visualizer on Canvas
-  - [ ] Library
-  - [ ] UI
+  - [ ] UI (similar to Musicolet)
+    - [ ] Library
+    - [ ] Queue
+    - [ ] Now Playing
+    - [ ] Spectrum viz + controls
+      - [ ] Add ExoPlayer controls to Bottom bar
+      - [ ] Implement FFT Spectrum visualizer on Canvas
 - Settings
   - [ ] Lyrics settings
   - [ ] Audio player settings

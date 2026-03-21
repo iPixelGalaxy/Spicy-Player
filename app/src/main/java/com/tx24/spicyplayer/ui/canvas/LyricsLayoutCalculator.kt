@@ -57,7 +57,7 @@ internal object LyricsLayoutCalculator {
             if (isInterlude) {
                 // Instrumental interludes are rendered as three dots.
                 // You can adjust the multiplier here to make the dots bigger or smaller:
-                val dotFontSize = baseFontSize * 1.35f
+                val dotFontSize = baseFontSize * 1.3f // FIXED: dots=1.3x font
                 // Finish the sequence a little earlier than the true line.endMs (give it a 150ms breather)
                 val effectiveDuration = maxOf(30L, line.duration - 250L)
                 val dotLayouts = (0 until 3).map { dotIdx ->
@@ -75,7 +75,7 @@ internal object LyricsLayoutCalculator {
                         )
                     )
                     val dotW = result.size.width.toFloat()
-                    val dotGap = (0.007f * canvasWidth).coerceIn(8f, 40f)
+                    val dotGap = 4f // FIXED: tight gaps
                     WordLayout(dotWord, result, Offset(dotIdx * (dotW + dotGap), 0f))
                 }
                 val dotH = dotLayouts.maxOfOrNull { it.textLayoutResult.size.height.toFloat() } ?: 0f
@@ -115,23 +115,12 @@ internal object LyricsLayoutCalculator {
                             fontFamily = spicyFontFamily,
                             fontSize = fontSize,
                             fontWeight = if (line.isSongwriter) FontWeight.Normal else mainFontWeight,
-                            color = Color.Transparent,
+                            color = Color.White,
                             letterSpacing = (wIdx * 0.001f).sp
                         )
-                        val textWithOneCharVisible = AnnotatedString.Builder().apply {
-                            withStyle(SpanStyle(color = Color.Transparent)) {
-                                append(word.text.substring(0, idx))
-                            }
-                            withStyle(SpanStyle(color = Color.White)) {
-                                append(word.text[idx])
-                            }
-                            withStyle(SpanStyle(color = Color.Transparent)) {
-                                append(word.text.substring(idx + 1))
-                            }
-                        }.toAnnotatedString()
-
+                        
                         textMeasurer.measure(
-                            text = textWithOneCharVisible,
+                            text = word.text[idx].toString(),
                             style = charStyle
                         )
                     }
