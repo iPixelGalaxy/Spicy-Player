@@ -116,8 +116,6 @@ class LyricsAnimator(private val coroutineScope: CoroutineScope) {
     private val dotSpringsMap = mutableMapOf<Long, DotSprings>()
     private val letterSpringsMap = mutableMapOf<Long, LetterSprings>()
 
-    private var lastFrameTimeNanos = 0L
-
     /**
      * Resets the animator state, clearing all cached spring values.
      */
@@ -127,7 +125,6 @@ class LyricsAnimator(private val coroutineScope: CoroutineScope) {
         lineScaleAnims.clear()
         dotSpringsMap.clear()
         letterSpringsMap.clear()
-        lastFrameTimeNanos = 0L
     }
 
     /**
@@ -135,22 +132,14 @@ class LyricsAnimator(private val coroutineScope: CoroutineScope) {
      *
      * @param lines The list of lyric lines to animate.
      * @param currentTimeMs The current playback time in milliseconds.
-     * @param frameTimeNanos The current frame timestamp in nanoseconds.
+     * @param deltaTime The time elapsed since the last frame in seconds.
      * @return A list of [LineAnimState] objects representing the calculated visual state.
      */
     fun animate(
         lines: List<Line>,
         currentTimeMs: Long,
-        frameTimeNanos: Long,
+        deltaTime: Float,
     ): List<LineAnimState> {
-        // Calculate the time elapsed since the last frame.
-        val deltaTime = if (lastFrameTimeNanos == 0L) {
-            0.016f // Assume 60fps for the first frame.
-        } else {
-            ((frameTimeNanos - lastFrameTimeNanos) / 1_000_000_000f).coerceIn(0f, 0.1f)
-        }
-        lastFrameTimeNanos = frameTimeNanos
-
         // Determine which lines are currently "active" (being sung).
         // For normal lines, multiple lines can be active (duets).
         val activeLineIndices = lines.indices

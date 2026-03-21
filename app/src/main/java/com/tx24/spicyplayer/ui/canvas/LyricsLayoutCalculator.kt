@@ -339,7 +339,7 @@ internal object LyricsLayoutCalculator {
             val totalWidth = maxRowWidth
 
             // Apply alignment and flatten.
-            val isRightAligned = hasDuet && !line.oppositeAligned && !line.isSongwriter
+            val isRightAligned = hasDuet && line.oppositeAligned && !line.isSongwriter
             val wordLayouts = mutableListOf<WordLayout>()
             for ((rWidth, rowPieces) in allRows) {
                 val alignmentShift = if (isRightAligned) maxRowWidth - rWidth else 0f

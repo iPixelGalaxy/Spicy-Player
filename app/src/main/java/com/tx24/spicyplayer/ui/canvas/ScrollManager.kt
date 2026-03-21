@@ -9,7 +9,7 @@ import com.tx24.spicyplayer.animation.SpringSimulation
 import kotlin.math.abs
 
 internal class ScrollManager(
-    private val scrollSpring: SpringSimulation = SpringSimulation(0f, 1.5f, 0.75f)
+    private val scrollSpring: SpringSimulation = SpringSimulation(0f, 1.5f, 1.0f)
 ) {
     var userScrollOffset by mutableFloatStateOf(0f)
         private set

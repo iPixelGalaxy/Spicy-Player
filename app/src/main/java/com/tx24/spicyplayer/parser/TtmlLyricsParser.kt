@@ -58,6 +58,13 @@ object TtmlLyricsParser {
                             val parsedLines = parseParagraph(parser, agent, defaultAgent)
                             lines.addAll(parsedLines)
                         }
+                        "agent" -> {
+                            val id = parser.getAttributeValue("http://www.w3.org/XML/1998/namespace", "id")
+                                ?: parser.getAttributeValue(null, "id")
+                            if (id == "v1") {
+                                defaultAgent = id
+                            }
+                        }
                     }
                 }
                 XmlPullParser.TEXT -> {

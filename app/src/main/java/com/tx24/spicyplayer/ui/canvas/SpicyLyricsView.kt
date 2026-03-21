@@ -65,7 +65,8 @@ fun SpicyLyricsView(
 
         var animStates by remember { mutableStateOf<List<LineAnimState>>(emptyList()) }
         var dynamicYOffsets by remember { mutableStateOf<List<Float>>(emptyList()) }
-
+        var lastFrameTimeNanos by remember { mutableLongStateOf(0L) }
+        
         // The high-frequency animation loop.
         LaunchedEffect(Unit) {
             while (true) {
@@ -74,9 +75,16 @@ fun SpicyLyricsView(
                     val currentLines = linesUpdated
                     val currentTime = currentTimeMsUpdated
 
+                    val deltaTime = if (lastFrameTimeNanos == 0L) {
+                        0.016f
+                    } else {
+                        ((frameTimeNanos - lastFrameTimeNanos) / 1_000_000_000f).coerceIn(0f, 0.1f)
+                    }
+                    lastFrameTimeNanos = frameTimeNanos
+
                     if (currentLayouts.size == currentLines.size && currentLines.isNotEmpty()) {
                         // 1. Step the animator for visual properties (scale, opacity, glow).
-                        animStates = animator.animate(currentLines, currentTime, frameTimeNanos)
+                        animStates = animator.animate(currentLines, currentTime, deltaTime)
 
                         // 1.5 Calculate dynamic Y offsets based on interlude scales.
                         var accumulatedY = 0f
@@ -126,10 +134,9 @@ fun SpicyLyricsView(
                         }
 
                         // 3. Step the scroll spring and handle user overrides.
-                        val dt = 0.016f
                         val totalContentHeight = (currentLayouts.lastOrNull()?.yOffset ?: 0f) + accumulatedY
                         
-                        scrollManager.updateScroll(currentTime, dt, totalContentHeight, targetY)
+                        scrollManager.updateScroll(currentTime, deltaTime, totalContentHeight, targetY)
                     }
                 }
             }
@@ -210,9 +217,9 @@ private fun getLineStartX(
     if (layout.isSongwriter) {
         return horizontalPadding
     }
-    return if (!hasDuet || layout.oppositeAligned) {
-        horizontalPadding
-    } else {
+    return if (layout.oppositeAligned) {
         canvasWidth - horizontalPadding - layout.totalWidth
+    } else {
+        horizontalPadding
     }
 }

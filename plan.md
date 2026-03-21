@@ -2,27 +2,16 @@
 
 - Lyrics aspect
   - [x] TTML parser
-    - [x] Set up Word and Line data classes
-    - [x] Implement TTML `XmlPullParser` that handles nested spans
-  - [x] Basic Compose lyrics list
-    - [x] Render parsed lines in a basic list
-    - [x] Hook up current playback time from ExoPlayer
-  - [x] Canvas word renderer + glow
-    - [x] Implement Spikerko/spicy-lyrics style word glow and scale
-    - [x] Handle word overlaps by prioritizing closest timestamp
-    - [x] Precompute word bounds off main thread
-  - [x] Smooth scroll + tap-seek
-    - [x] Canvas smooth scrolling (current line ±1 visible)
-    - [x] Line preview (next/prev lines dimmed)
-    - [x] Tap word to seek to timestamp
-  - [x] 3 Dots Instrum. Part indicator
-  - [x] Inertia-based scroll
+  - [x] Compose lyrics list
+  - [x] Word renderer
+  - [x] Smooth scroll with inertia
+  - [x] Tap to seek
+  - [x] 3 Dots Interlude indicator
   - [x] Dynamic Background
   - [ ] Landscape view
   - [ ] Fix held word animation
 - Audio player aspect
   - [x] ExoPlayer
-    - [x] Set up ExoPlayer with `androidx.media3:media3-exoplayer` and `androidx.media3:media3-flac`
   - [ ] Folder scanner + auto-pairing
     - [ ] Implement file picker to scan `/Music/` directory
     - [x] Auto-pair `.flac` and `.ttml` files based on name
@@ -31,8 +20,6 @@
     - [ ] Queue
     - [ ] Now Playing
     - [ ] Spectrum viz + controls
-      - [ ] Add ExoPlayer controls to Bottom bar
-      - [ ] Implement FFT Spectrum visualizer on Canvas
 - Settings
   - [ ] Lyrics settings
   - [ ] Audio player settings
