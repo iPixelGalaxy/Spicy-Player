@@ -45,8 +45,11 @@ class DynamicBackgroundRenderer {
         private const val TEXTURE_SIZE = 128
     }
 
-    /** The pre-blurred, circular-cropped texture bitmap. */
+    /** The pre-blurred, circular-cropped current texture bitmap. */
     private var blurredTexture: Bitmap? = null
+
+    /** The pre-blurred, circular-cropped previous texture bitmap for cross-fading. */
+    private var previousTexture: Bitmap? = null
 
     /** The source image URL/path that produced the current texture (for dedup). */
     private var currentSourceId: String? = null
@@ -91,6 +94,11 @@ class DynamicBackgroundRenderer {
      */
     fun setImage(source: Bitmap, sourceId: String) {
         if (sourceId == currentSourceId) return
+        
+        // Move current to previous for cross-fade
+        previousTexture?.recycle()
+        previousTexture = blurredTexture
+        
         currentSourceId = sourceId
 
         // 1. Scale down to TEXTURE_SIZE x TEXTURE_SIZE
@@ -131,50 +139,67 @@ class DynamicBackgroundRenderer {
      * @param width The canvas width in pixels.
      * @param height The canvas height in pixels.
      * @param rotationAngle The current rotation angle in radians.
+     * @param transitionProgress The progress of the cross-fade transition (0.0 to 1.0).
      */
-    fun draw(nativeCanvas: Canvas, width: Float, height: Float, rotationAngle: Float) {
-        val texture = blurredTexture ?: return
+    fun draw(nativeCanvas: Canvas, width: Float, height: Float, rotationAngle: Float, transitionProgress: Float = 1.0f) {
+        val current = blurredTexture
+        val previous = previousTexture
+
+        if (current == null && previous == null) return
 
         val largestAxis = maxOf(width, height)
         val isXLarger = width > height
         val centerX = width / 2f
         val centerY = height / 2f
 
-        // Background circle: center, radius = 1.5× largestAxis, α = 1.0, rot = -0.25× angle
-        drawCircle(
-            nativeCanvas, texture,
-            cx = centerX, cy = centerY,
-            radius = largestAxis * 1.5f,
-            rotationDegrees = Math.toDegrees((-0.25f * rotationAngle).toDouble()).toFloat(),
-            alpha = 1.0f
-        )
+        // If transitioning, draw previous background first then current with globalAlpha overlay
+        // Or better: draw both with their respective alphas.
+        
+        fun drawAllCircles(texture: Bitmap, globalAlpha: Float) {
+            // Background circle
+            drawCircle(
+                nativeCanvas, texture,
+                cx = centerX, cy = centerY,
+                radius = largestAxis * 1.5f,
+                rotationDegrees = Math.toDegrees((-0.25f * rotationAngle).toDouble()).toFloat(),
+                alpha = 1.0f * globalAlpha
+            )
 
-        // Center circle: center, radius depends on axis, α = 0.75, rot = +0.5× angle
-        drawCircle(
-            nativeCanvas, texture,
-            cx = centerX, cy = centerY,
-            radius = largestAxis * if (isXLarger) 1.0f else 0.75f,
-            rotationDegrees = Math.toDegrees((0.5f * rotationAngle).toDouble()).toFloat(),
-            alpha = 0.75f
-        )
+            // Center circle
+            drawCircle(
+                nativeCanvas, texture,
+                cx = centerX, cy = centerY,
+                radius = largestAxis * if (isXLarger) 1.0f else 0.75f,
+                rotationDegrees = Math.toDegrees((0.5f * rotationAngle).toDouble()).toFloat(),
+                alpha = 0.75f * globalAlpha
+            )
 
-        // Left circle: bottom-left, radius = 0.75× largestAxis, α = 0.5, rot = +1.0× angle
-        drawCircle(
-            nativeCanvas, texture,
-            cx = 0f, cy = height,
-            radius = largestAxis * 0.75f,
-            rotationDegrees = Math.toDegrees((1.0f * rotationAngle).toDouble()).toFloat(),
-            alpha = 0.5f
-        )
+            // Left circle
+            drawCircle(
+                nativeCanvas, texture,
+                cx = 0f, cy = height,
+                radius = largestAxis * 0.75f,
+                rotationDegrees = Math.toDegrees((1.0f * rotationAngle).toDouble()).toFloat(),
+                alpha = 0.5f * globalAlpha
+            )
 
-        // Right circle: top-right, radius depends on axis, α = 0.5, rot = -0.75× angle
-        drawCircle(
-            nativeCanvas, texture,
-            cx = width, cy = 0f,
-            radius = largestAxis * if (isXLarger) 0.65f else 0.5f,
-            rotationDegrees = Math.toDegrees((-0.75f * rotationAngle).toDouble()).toFloat(),
-            alpha = 0.5f
-        )
+            // Right circle
+            drawCircle(
+                nativeCanvas, texture,
+                cx = width, cy = 0f,
+                radius = largestAxis * if (isXLarger) 0.65f else 0.5f,
+                rotationDegrees = Math.toDegrees((-0.75f * rotationAngle).toDouble()).toFloat(),
+                alpha = 0.5f * globalAlpha
+            )
+        }
+
+        if (transitionProgress < 1.0f && previous != null) {
+            drawAllCircles(previous, 1.0f - transitionProgress)
+        }
+        
+        if (current != null) {
+            drawAllCircles(current, transitionProgress)
+        }
     }
 
     /**
@@ -218,6 +243,8 @@ class DynamicBackgroundRenderer {
     fun release() {
         blurredTexture?.recycle()
         blurredTexture = null
+        previousTexture?.recycle()
+        previousTexture = null
         currentSourceId = null
     }
 }

@@ -32,7 +32,8 @@ object TtmlLyricsParser {
     fun parse(inputStream: InputStream): ParsedLyrics {
         val parser = Xml.newPullParser()
         parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, true)
-        parser.setInput(InputStreamReader(inputStream))
+        val reader = inputStream.reader(Charsets.UTF_8)
+        parser.setInput(reader)
 
         val lines = mutableListOf<Line>()
         val songwriters = mutableListOf<String>()

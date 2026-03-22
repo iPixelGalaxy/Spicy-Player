@@ -22,8 +22,9 @@ class AudioPlayer(private val context: Context) {
      * Uses a [ConcatenatingMediaSource] to support gapless playback for FLAC files.
      *
      * @param uris List of absolute file paths to the audio files.
+     * @param playWhenReady Whether to start playback immediately after preparation.
      */
-    fun preparePlaylist(uris: List<String>) {
+    fun preparePlaylist(uris: List<String>, playWhenReady: Boolean = true) {
         val dataSourceFactory = DefaultDataSource.Factory(context)
         val mediaSourceFactory = ProgressiveMediaSource.Factory(dataSourceFactory)
         
@@ -37,7 +38,7 @@ class AudioPlayer(private val context: Context) {
         
         player.setMediaSource(concatenatingMediaSource)
         player.prepare()
-        player.playWhenReady = true
+        player.playWhenReady = playWhenReady
     }
     
     /**

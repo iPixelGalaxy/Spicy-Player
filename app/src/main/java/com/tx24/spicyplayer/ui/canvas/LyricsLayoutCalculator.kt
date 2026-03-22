@@ -93,11 +93,17 @@ internal object LyricsLayoutCalculator {
                 }
                 val dotH = dotLayouts.maxOfOrNull { it.textLayoutResult.size.height.toFloat() } ?: 0f
                 val totalDotsW = dotLayouts.lastOrNull()?.let { it.relativeOffset.x + it.textLayoutResult.size.width } ?: 0f
-                
-                layouts.add(LineLayout(line, dotLayouts, currentY, dotH, totalDotsW, totalDotsW, true, isBg, line.oppositeAligned, false))
+
+                // Inherit alignment from the next non-interlude, non-background line.
+                val nextLineAlignment = lines
+                    .firstOrNull { it.startMs > line.startMs && !it.isInterlude && !it.isBackground && !it.isSongwriter }
+                    ?.oppositeAligned ?: false
+
+                layouts.add(LineLayout(line, dotLayouts, currentY, dotH, totalDotsW, totalDotsW, true, isBg, nextLineAlignment, false))
                 currentY += 0f // Interludes collapse when not active.
                 continue
             }
+
 
             // Standard lyric line layout.
             val spaceWidth = textMeasurer.measure(
