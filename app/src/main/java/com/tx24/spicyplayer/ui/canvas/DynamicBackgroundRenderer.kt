@@ -90,9 +90,10 @@ class DynamicBackgroundRenderer {
      * This is an expensive operation and should be called off the main thread.
      *
      * @param source The album cover art bitmap.
-     * @param sourceId A unique identifier for deduplication (e.g. file path).
+     * @param sourceId A unique identifier for deduplication (e.g. file path + blur level).
+     * @param blurIntensity Blur intensity 0–100 (default 60).
      */
-    fun setImage(source: Bitmap, sourceId: String) {
+    fun setImage(source: Bitmap, sourceId: String, blurIntensity: Int = 60) {
         if (sourceId == currentSourceId) return
         
         // Move current to previous for cross-fade
@@ -113,8 +114,11 @@ class DynamicBackgroundRenderer {
         canvas.clipPath(circleClip)
         canvas.drawBitmap(scaled, 0f, 0f, null)
 
-        // 3. Create expanded bitmap with padding to accommodate blur spread
-        val blurRadius = (BLUR_AMOUNT * size / 640f).toInt().coerceAtLeast(1)
+        // 3. Scale blur amount by intensity (0 → radius 1, 100 → radius BLUR_AMOUNT)
+        val effectiveBlur = (BLUR_AMOUNT * blurIntensity / 100f).toInt().coerceAtLeast(1)
+
+        // 4. Create expanded bitmap with padding to accommodate blur spread
+        val blurRadius = (effectiveBlur * size / 640f).toInt().coerceAtLeast(1)
         val blurExtent = (3 * blurRadius * 1.5f).toInt()
         val expandedSize = size + blurExtent
         val expanded = Bitmap.createBitmap(expandedSize, expandedSize, Bitmap.Config.ARGB_8888)
@@ -122,7 +126,7 @@ class DynamicBackgroundRenderer {
         val offset = blurExtent / 2f
         expandedCanvas.drawBitmap(circled, offset, offset, null)
 
-        // 4. Apply blur
+        // 5. Apply blur
         blurredTexture = StackBlur.blur(expanded, blurRadius)
 
         // Recycle intermediates

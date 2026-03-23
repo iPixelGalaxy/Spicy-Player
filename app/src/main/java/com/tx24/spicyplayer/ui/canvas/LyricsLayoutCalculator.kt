@@ -39,7 +39,8 @@ internal object LyricsLayoutCalculator {
     fun calculateLineLayouts(
         lines: List<Line>,
         canvasWidth: Float,
-        textMeasurer: TextMeasurer
+        textMeasurer: TextMeasurer,
+        fontSizeScale: Float = 1.0f,
     ): List<LineLayout> {
 
         val layouts = mutableListOf<LineLayout>()
@@ -58,7 +59,7 @@ internal object LyricsLayoutCalculator {
             canvasWidth - (horizontalPadding * 2)
         }
         
-        val baseFontSize = (canvasWidth / 20f).coerceIn(16f, 32f).sp
+        val baseFontSize = (canvasWidth / 20f).coerceIn(16f, 32f).sp * fontSizeScale
         val bgFontSize = baseFontSize * 0.7f
         val songwriterFontSize = baseFontSize * 0.5f
 

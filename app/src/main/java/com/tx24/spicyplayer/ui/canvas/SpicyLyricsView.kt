@@ -9,6 +9,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.rememberTextMeasurer
 import com.tx24.spicyplayer.animation.LineAnimState
 import com.tx24.spicyplayer.animation.LyricsAnimator
@@ -33,6 +34,7 @@ fun SpicyLyricsView(
     currentTimeMs: Long,
     onSeekWord: (Long) -> Unit,
     modifier: Modifier = Modifier,
+    fontSizeScale: Float = 1.0f,
 ) {
     val textMeasurer = rememberTextMeasurer()
     var lineLayouts by remember { mutableStateOf<List<LineLayout>>(emptyList()) }
@@ -54,10 +56,10 @@ fun SpicyLyricsView(
         val horizontalPadding = 40f
         val hasDuet = remember(lines) { lines.any { it.oppositeAligned } }
 
-        // Recalculate layouts whenever the lyrics or dimensions change.
-        LaunchedEffect(lines, canvasWidth) {
+        // Recalculate layouts whenever the lyrics, dimensions, or font size change.
+        LaunchedEffect(lines, canvasWidth, fontSizeScale) {
             withContext(Dispatchers.Default) {
-                lineLayouts = LyricsLayoutCalculator.calculateLineLayouts(lines, canvasWidth, textMeasurer)
+                lineLayouts = LyricsLayoutCalculator.calculateLineLayouts(lines, canvasWidth, textMeasurer, fontSizeScale)
             }
         }
 

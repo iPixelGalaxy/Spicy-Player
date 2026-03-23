@@ -7,6 +7,7 @@
     - [x] Tap to seek
     - [x] 3 Dots Interlude indicator
     - [x] Dynamic Background
+    - [ ] Romanization
     - [ ] Landscape view
       - [ ] Split screen layout with cover art/controls on the left and scrolling lyrics on the right
     - [ ] Fixes
@@ -15,12 +16,17 @@
   - Audio player aspect
     - [x] ExoPlayer
     - [ ] Folder scanner + auto-pairing
-      - [ ] Implement file picker to scan `/Music/` directory
+      - [x] Implement file picker to scan `/Music/` directory
         - [ ] Use Android Storage Access Framework (SAF) for scoped storage compliance
         - [ ] Background service for scanning with a progress notification
       - [x] Auto-pair `.flac` and `.ttml` files based on name
     - [ ] Implement MediaSession for song info broadcasting
     - [ ] UI
+      - [ ] Introduction screen
+        - [ ] Greeting
+        - [ ] Tutorial
+        - [ ] Select folder to scan
+        - [ ] Show progress of scanning
       - [ ] Library
         - [ ] Categorized tabs: Albums, Artists, Songs, Folders, and Playlists
         - [ ] Grid view for Albums/Artists with fast-scroll alphabet indexer on the right edge
@@ -41,16 +47,22 @@
         - [ ] Fetch audio session ID from ExoPlayer to drive visualizer data
         - [ ] Multiple visualizer styles (e.g., bar graph, waveform, circular aura around cover art)
   - Settings
-    - [ ] Lyrics settings
-      - [ ] Global offset/delay adjustment (e.g., ±500ms) for out-of-sync lyrics
-      - [ ] Custom font size and highlight color picker (using Material 3 dynamic colors by default)
-    - [ ] Audio player settings
-      - [ ] Equalizer (EQ) preset selection and Bass Boost toggle
+    - [x] Lyrics settings
+      - [x] Global offset/delay adjustment (e.g., ±500ms) for out-of-sync lyrics
+      - [x] Custom font size
+      - [ ] Translation
+    - [x] Audio player settings
+      - [x] Equalizer (EQ) preset selection and Bass Boost toggle
       - [ ] Crossfade duration slider (0-10 seconds) and gapless playback toggle
-    - [ ] General settings
-      - [ ] App theme selector (Light, Dark, System Default, Material You)
+    - [x] General settings
+      - [x] App theme selector (Light, Dark, System Default, Material You)
       - [ ] Cache management (clear cached images/lyrics to free up space)
-      - [ ] Keep screen on
+      - [x] Keep screen on
+      - [x] Scan directory
+      - [x] Audio focus mode
+      - [x] Rescan library
+        - [ ] Cache scanned and matched
+    - [ ] Reset to defaults button on everything
 - Bugs
   - [ ] RTL Languages
     - [ ] Ensure the Word renderer calculates layout widths properly from right to left
@@ -61,4 +73,11 @@
   - [ ] Audio focus handling
     - [ ] Properly pause playback on incoming calls and duck volume on transient notifications
   - [ ] Bluetooth/general audio delay fix
-  - [ ] 3 Dots interlude line spacings
+  - [ ] 3 Dots interlude BG line spacings
+  - [ ] Previous song
+  - [ ] Seeking doesn't move lyrics view
+  - [ ] BG Blur and timing offset have too many steps/circles in slider
+  - [ ] Fix scan directory setting
+  - [ ] Custom EQ doesn't work
+  - [x] Transition/animation between settings pages
+  - [ ] Performance improvements

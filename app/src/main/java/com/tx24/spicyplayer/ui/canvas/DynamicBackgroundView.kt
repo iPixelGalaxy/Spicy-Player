@@ -16,11 +16,13 @@ import kotlinx.coroutines.withContext
  * Place this behind all other content using a Box/Stack layout.
  *
  * @param coverArtBitmap The album cover art to derive the background from.
+ * @param blurIntensity Background blur intensity 0–100 (default 60).
  */
 @Composable
 fun DynamicBackgroundView(
     coverArtBitmap: Bitmap?,
     modifier: Modifier = Modifier,
+    blurIntensity: Int = 60,
 ) {
     val bgRenderer = remember { DynamicBackgroundRenderer() }
     
@@ -32,10 +34,10 @@ fun DynamicBackgroundView(
     val transitionProgress = remember { Animatable(1.0f) }
     
     // Prepare the blurred texture when the cover art changes
-    LaunchedEffect(coverArtBitmap) {
+    LaunchedEffect(coverArtBitmap, blurIntensity) {
         coverArtBitmap?.let { bmp ->
             withContext(Dispatchers.Default) {
-                bgRenderer.setImage(bmp, bmp.generationId.toString())
+                bgRenderer.setImage(bmp, bmp.generationId.toString() + "_blur$blurIntensity", blurIntensity)
                 // Reset and animate transition
                 transitionProgress.snapTo(0.0f)
                 transitionProgress.animateTo(
@@ -72,3 +74,4 @@ fun DynamicBackgroundView(
         }
     }
 }
+
