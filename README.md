@@ -2,7 +2,7 @@
 
 Spicy Player is an offline music player for Android with a port/recreation of [Spicy Lyrics](https://github.com/Spikerko/spicy-lyrics) - A [Spicetify](https://spicetify.app/) Extension, designed to achieve **visual parity** with Spicy Lyrics' rendering. Built using **Jetpack Compose (Canvas API)** and **ExoPlayer**.
 
-This repo also includes an **iOS SwiftUI app target** under [ios/project.yml](ios/project.yml). The iOS version keeps the same local-file workflow: load an audio file, automatically pair a same-name `.ttml` file beside it, then render synchronized lyrics during playback.
+This repo also includes an **iOS SwiftUI app target** under [ios/project.yml](ios/project.yml). The iOS version uses an app-local library workflow: import songs or whole folders, copy audio and `.ttml` files into the app's storage, auto-pair by basename, and render synchronized lyrics during playback.
 
 > [!WARNING]
 > This is a work in progress. The app is not yet complete and may have bugs.
@@ -72,20 +72,21 @@ GitHub Actions includes a manual workflow at [.github/workflows/build-mobile.yml
 
 - `platform`: build `android`, `ios`, or `both`
 - `android_variant`: build `Debug` or `Release`
-- `ios_export`: export a signed `ipa` or an unsigned `simulator-app`
-- `ios_export_method`: choose `development`, `ad-hoc`, or `app-store` for IPA exports
+- `ios_export`: export an unsigned device `ipa` for sideload tools or an unsigned `simulator-app`
 
-### iOS Signing Secrets
+The workflow generates the Xcode project from [ios/project.yml](ios/project.yml) using XcodeGen on the macOS runner, then builds either:
 
-IPA export requires these GitHub repository secrets:
+- an unsigned device `.ipa` suitable for local resigning/sideloading tools such as Sideloadly
+- an unsigned iOS Simulator `.app` zip
 
-- `IOS_CERTIFICATE_P12_BASE64`
-- `IOS_CERTIFICATE_PASSWORD`
-- `IOS_PROVISIONING_PROFILE_BASE64`
-- `IOS_TEAM_ID`
-- `IOS_SIGNING_IDENTITY`
+The iOS app icons are generated during the Xcode build and in CI from the existing Android source logo at [app/src/main/res/drawable/logo.png](app/src/main/res/drawable/logo.png), so the repo does not need committed per-size iOS icon PNGs.
 
-The workflow generates the Xcode project from [ios/project.yml](ios/project.yml) using XcodeGen on the macOS runner, then archives and exports the app.
+### iOS Import Behavior
+
+- `Import Song`: copies one audio file into the app-local library and attempts to auto-import a sibling `.ttml`
+- `Import Folder`: recursively scans a selected folder for supported audio files and `.ttml` files
+- `Attach Lyrics`: manually pairs a selected `.ttml` file with the currently loaded track
+- Imported tracks persist across launches because they are stored in the app's `Application Support` directory
 
 ## License
 

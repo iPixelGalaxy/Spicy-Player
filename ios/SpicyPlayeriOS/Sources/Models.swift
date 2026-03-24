@@ -67,3 +67,18 @@ struct ParsedLyrics {
     let lines: [LyricLine]
     let songwriters: [String]
 }
+
+struct ImportedTrack: Identifiable, Hashable {
+    let baseName: String
+    let title: String
+    let audioURL: URL
+    let lyricsURL: URL?
+
+    var id: String {
+        baseName.lowercased()
+    }
+
+    var hasLyrics: Bool {
+        lyricsURL != nil
+    }
+}

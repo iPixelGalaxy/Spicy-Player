@@ -276,7 +276,7 @@ private struct ParagraphState {
         }
 
         let spaceTokens = trimmed
-            .split(whereSeparator: \.isWhitespace)
+            .split(whereSeparator: { $0.isWhitespace })
             .map(String.init)
             .filter { !$0.isEmpty }
 

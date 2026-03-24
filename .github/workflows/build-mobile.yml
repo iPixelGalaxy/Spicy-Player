@@ -1,5 +1,8 @@
 name: Build Mobile
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 on:
   workflow_dispatch:
     inputs:
@@ -28,15 +31,6 @@ on:
         options:
           - ipa
           - simulator-app
-      ios_export_method:
-        description: "Export method for IPA builds"
-        required: true
-        default: "development"
-        type: choice
-        options:
-          - development
-          - ad-hoc
-          - app-store
 
 jobs:
   android:
@@ -89,11 +83,13 @@ jobs:
         run: brew install xcodegen
 
       - name: Generate Xcode project
-        run: xcodegen generate --spec ios/project.yml --project ios/SpicyPlayeriOS.xcodeproj
+        working-directory: ios
+        run: xcodegen generate --spec project.yml
 
       - name: Build simulator app
         if: ${{ inputs.ios_export == 'simulator-app' }}
         run: |
+          set -o pipefail
           xcodebuild \
             -project "$IOS_PROJECT" \
             -scheme "$IOS_SCHEME" \
@@ -101,7 +97,22 @@ jobs:
             -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO \
-            build
+            build 2>&1 | tee "$RUNNER_TEMP/xcodebuild-ios.log"
+
+      - name: Build unsigned device app
+        if: ${{ inputs.ios_export == 'ipa' }}
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project "$IOS_PROJECT" \
+            -scheme "$IOS_SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build 2>&1 | tee "$RUNNER_TEMP/xcodebuild-ios.log"
 
       - name: Package simulator app
         if: ${{ inputs.ios_export == 'simulator-app' }}
@@ -114,6 +125,26 @@ jobs:
           mkdir -p artifacts
           ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" artifacts/spicy-player-ios-simulator-app.zip
 
+      - name: Package unsigned IPA
+        if: ${{ inputs.ios_export == 'ipa' }}
+        run: |
+          APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -path "*Build/Products/Release-iphoneos/Spicy Player.app" -print -quit)
+          if [ -z "$APP_PATH" ]; then
+            echo "Device .app not found."
+            exit 1
+          fi
+          mkdir -p artifacts/Payload
+          cp -R "$APP_PATH" artifacts/Payload/
+          cd artifacts
+          zip -r spicy-player.ipa Payload
+
+      - name: Upload IPA artifact
+        if: ${{ inputs.ios_export == 'ipa' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: spicy-player-ipa
+          path: artifacts/spicy-player.ipa
+
       - name: Upload simulator app
         if: ${{ inputs.ios_export == 'simulator-app' }}
         uses: actions/upload-artifact@v4
@@ -121,92 +152,9 @@ jobs:
           name: ios-simulator-app
           path: artifacts/spicy-player-ios-simulator-app.zip
 
-      - name: Validate signing secrets
-        if: ${{ inputs.ios_export == 'ipa' }}
-        run: |
-          test -n "${{ secrets.IOS_CERTIFICATE_P12_BASE64 }}" || (echo "Missing IOS_CERTIFICATE_P12_BASE64" && exit 1)
-          test -n "${{ secrets.IOS_CERTIFICATE_PASSWORD }}" || (echo "Missing IOS_CERTIFICATE_PASSWORD" && exit 1)
-          test -n "${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}" || (echo "Missing IOS_PROVISIONING_PROFILE_BASE64" && exit 1)
-          test -n "${{ secrets.IOS_TEAM_ID }}" || (echo "Missing IOS_TEAM_ID" && exit 1)
-          test -n "${{ secrets.IOS_SIGNING_IDENTITY }}" || (echo "Missing IOS_SIGNING_IDENTITY" && exit 1)
-
-      - name: Install signing certificate and profile
-        if: ${{ inputs.ios_export == 'ipa' }}
-        env:
-          BUILD_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_P12_BASE64 }}
-          P12_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
-          BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
-        run: |
-          KEYCHAIN_PATH="$RUNNER_TEMP/spicy-player-signing.keychain-db"
-          CERT_PATH="$RUNNER_TEMP/build_certificate.p12"
-          PROFILE_PATH="$RUNNER_TEMP/profile.mobileprovision"
-
-          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o "$CERT_PATH"
-          echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode -o "$PROFILE_PATH"
-
-          security create-keychain -p "" "$KEYCHAIN_PATH"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security unlock-keychain -p "" "$KEYCHAIN_PATH"
-          security import "$CERT_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
-          security list-keychains -d user -s "$KEYCHAIN_PATH"
-
-          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-          cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/"
-
-          security cms -D -i "$PROFILE_PATH" > "$RUNNER_TEMP/profile.plist"
-          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c "Print :Name" "$RUNNER_TEMP/profile.plist")
-          echo "PROFILE_NAME=$PROFILE_NAME" >> "$GITHUB_ENV"
-
-      - name: Archive iOS app
-        if: ${{ inputs.ios_export == 'ipa' }}
-        env:
-          DEVELOPMENT_TEAM: ${{ secrets.IOS_TEAM_ID }}
-          CODE_SIGN_IDENTITY: ${{ secrets.IOS_SIGNING_IDENTITY }}
-        run: |
-          xcodebuild \
-            -project "$IOS_PROJECT" \
-            -scheme "$IOS_SCHEME" \
-            -configuration Release \
-            -archivePath "$RUNNER_TEMP/SpicyPlayeriOS.xcarchive" \
-            DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
-            CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY="$CODE_SIGN_IDENTITY" \
-            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME" \
-            archive
-
-      - name: Export IPA
-        if: ${{ inputs.ios_export == 'ipa' }}
-        env:
-          DEVELOPMENT_TEAM: ${{ secrets.IOS_TEAM_ID }}
-        run: |
-          cat > "$RUNNER_TEMP/ExportOptions.plist" <<EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key>
-            <string>${{ inputs.ios_export_method }}</string>
-            <key>signingStyle</key>
-            <string>manual</string>
-            <key>teamID</key>
-            <string>${DEVELOPMENT_TEAM}</string>
-            <key>provisioningProfiles</key>
-            <dict>
-              <key>${IOS_BUNDLE_ID}</key>
-              <string>${PROFILE_NAME}</string>
-            </dict>
-          </dict>
-          </plist>
-          EOF
-
-          xcodebuild -exportArchive \
-            -archivePath "$RUNNER_TEMP/SpicyPlayeriOS.xcarchive" \
-            -exportPath "$RUNNER_TEMP/exported-ios" \
-            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist"
-
-      - name: Upload IPA artifact
-        if: ${{ inputs.ios_export == 'ipa' }}
+      - name: Upload iOS build log
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: ios-ipa
-          path: ${{ runner.temp }}/exported-ios/*.ipa
+          name: ios-build-log
+          path: ${{ runner.temp }}/xcodebuild-ios.log

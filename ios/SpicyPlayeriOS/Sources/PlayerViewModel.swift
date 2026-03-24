@@ -10,19 +10,35 @@ final class PlayerViewModel: ObservableObject {
     @Published var isPlaying = false
     @Published var artwork: UIImage?
     @Published var nowPlayingTitle = "No Track Loaded"
-    @Published var lyricsStatus = "Pick an audio file to start."
+    @Published var lyricsStatus = "Import a song or a folder to start."
     @Published var errorMessage: String?
+    @Published var libraryTracks: [ImportedTrack] = []
+    @Published var selectedTrackID: ImportedTrack.ID?
 
     private let player = AVPlayer()
     private var timeObserver: Any?
-    private var activeURLs: [URL] = []
+    private var currentTrackBaseName: String?
+    private let supportedAudioExtensions: Set<String> = ["flac", "mp3", "wav", "m4a", "aac", "alac", "caf", "aif", "aiff"]
+    private let lastSelectedTrackDefaultsKey = "SpicyPlayeriOS.lastSelectedTrackBaseName"
 
     init() {
         configureAudioSession()
         installTimeObserver()
+        ensureLibraryDirectories()
+        refreshLibrary()
+
+        Task {
+            await restoreLastSelectedTrack()
+        }
     }
 
-    func supportedTypes() -> [UTType] {
+    deinit {
+        if let timeObserver {
+            player.removeTimeObserver(timeObserver)
+        }
+    }
+
+    func supportedAudioTypes() -> [UTType] {
         var result: [UTType] = [.audio]
         if let flac = UTType(filenameExtension: "flac") {
             result.append(flac)
@@ -30,25 +46,78 @@ final class PlayerViewModel: ObservableObject {
         return result
     }
 
-    func importSong(from url: URL) async {
+    func supportedLyricsTypes() -> [UTType] {
+        var result: [UTType] = []
+        if let ttml = UTType(filenameExtension: "ttml") {
+            result.append(ttml)
+        }
+        result.append(.xml)
+        return result
+    }
+
+    func supportedFolderTypes() -> [UTType] {
+        [.folder]
+    }
+
+    func importSong(from externalURL: URL) async {
         errorMessage = nil
-        releaseSecurityScopes()
-        artwork = nil
-        lines = []
 
-        if url.startAccessingSecurityScopedResource() {
-            activeURLs = [url]
+        do {
+            let importedAudioURL = try importAudioFile(from: externalURL)
+            let baseName = importedAudioURL.deletingPathExtension().lastPathComponent
+
+            try? importSiblingLyricsIfAvailable(for: externalURL, baseName: baseName)
+            refreshLibrary()
+            await loadTrack(baseName: baseName, autoplay: true)
+        } catch {
+            errorMessage = "Song import failed: \(error.localizedDescription)"
+            lyricsStatus = "Import a song or a folder to start."
         }
-        nowPlayingTitle = url.deletingPathExtension().lastPathComponent
+    }
 
-        let lyricsURL = url.deletingPathExtension().appendingPathExtension("ttml")
-        if FileManager.default.fileExists(atPath: lyricsURL.path), lyricsURL.startAccessingSecurityScopedResource() {
-            activeURLs.append(lyricsURL)
+    func importFolder(from externalFolderURL: URL) async {
+        errorMessage = nil
+
+        do {
+            let importedBaseNames = try importFolderContents(from: externalFolderURL)
+            refreshLibrary()
+
+            if let firstImportedBaseName = importedBaseNames.first {
+                await loadTrack(baseName: firstImportedBaseName, autoplay: false)
+                lyricsStatus = "Imported \(importedBaseNames.count) track(s) from folder."
+            } else {
+                lyricsStatus = "No supported audio files were found in that folder."
+            }
+        } catch {
+            errorMessage = "Folder import failed: \(error.localizedDescription)"
+        }
+    }
+
+    func importLyricsForCurrentTrack(from externalURL: URL) async {
+        errorMessage = nil
+
+        guard let baseName = currentTrackBaseName else {
+            errorMessage = "Import a song first, then attach lyrics."
+            return
         }
 
-        await loadLyrics(from: lyricsURL)
-        await loadArtwork(from: url)
-        replaceCurrentItem(with: url)
+        do {
+            let destination = lyricsDirectoryURL().appendingPathComponent("\(baseName).ttml")
+            _ = try importFile(from: externalURL, to: destination)
+            refreshLibrary()
+            lyricsStatus = "Imported lyrics for \(baseName)."
+            await loadBestLyricsMatch(for: baseName)
+        } catch {
+            errorMessage = "Lyrics import failed: \(error.localizedDescription)"
+        }
+    }
+
+    func loadTrack(_ track: ImportedTrack, autoplay: Bool = false) async {
+        await loadTrack(baseName: track.baseName, autoplay: autoplay)
+    }
+
+    func canAttachLyrics() -> Bool {
+        currentTrackBaseName != nil
     }
 
     func togglePlayback() {
@@ -94,26 +163,74 @@ final class PlayerViewModel: ObservableObject {
                 return
             }
 
-            let milliseconds = Int((time.seconds * 1000.0).rounded())
-            if milliseconds >= 0 {
-                self.currentTimeMs = milliseconds
-            }
+            Task { @MainActor in
+                let milliseconds = Int((time.seconds * 1000.0).rounded())
+                if milliseconds >= 0 {
+                    self.currentTimeMs = milliseconds
+                }
 
-            if let currentItem = self.player.currentItem {
-                let isAtEnd = currentItem.status == .readyToPlay && currentItem.duration.isNumeric && time >= currentItem.duration
-                if isAtEnd {
-                    self.isPlaying = false
+                if let currentItem = self.player.currentItem {
+                    let isAtEnd = currentItem.status == .readyToPlay && currentItem.duration.isNumeric && time >= currentItem.duration
+                    if isAtEnd {
+                        self.isPlaying = false
+                    }
                 }
             }
         }
     }
 
-    private func replaceCurrentItem(with url: URL) {
+    private func replaceCurrentItem(with url: URL, autoplay: Bool) {
+        player.pause()
         let item = AVPlayerItem(url: url)
         player.replaceCurrentItem(with: item)
-        player.play()
-        isPlaying = true
         currentTimeMs = 0
+
+        if autoplay {
+            player.play()
+            isPlaying = true
+        } else {
+            isPlaying = false
+        }
+    }
+
+    private func restoreLastSelectedTrack() async {
+        guard let storedBaseName = UserDefaults.standard.string(forKey: lastSelectedTrackDefaultsKey) else {
+            return
+        }
+
+        await loadTrack(baseName: storedBaseName, autoplay: false)
+    }
+
+    private func loadTrack(baseName: String, autoplay: Bool) async {
+        refreshLibrary()
+
+        guard let track = libraryTracks.first(where: { compareBaseName($0.baseName, baseName) }) else {
+            return
+        }
+
+        errorMessage = nil
+        lines = []
+        artwork = nil
+        currentTrackBaseName = track.baseName
+        nowPlayingTitle = track.title
+        selectedTrackID = track.id
+        UserDefaults.standard.set(track.baseName, forKey: lastSelectedTrackDefaultsKey)
+
+        await loadArtwork(from: track.audioURL)
+        replaceCurrentItem(with: track.audioURL, autoplay: autoplay)
+        await loadBestLyricsMatch(for: track.baseName)
+    }
+
+    private func loadBestLyricsMatch(for baseName: String) async {
+        guard let lyricsURL = findLyricsURL(for: baseName) else {
+            lines = []
+            lyricsStatus = "No imported lyrics found. Use Attach Lyrics to pair a .ttml file."
+            refreshLibrary()
+            return
+        }
+
+        await loadLyrics(from: lyricsURL)
+        refreshLibrary()
     }
 
     private func loadLyrics(from url: URL) async {
@@ -121,13 +238,13 @@ final class PlayerViewModel: ObservableObject {
             let data = try Data(contentsOf: url)
             let parsed = try TTMLLyricsParser.parse(data: data)
             lines = parsed.lines
-            lyricsStatus = parsed.lines.isEmpty ? "No lyric lines found in \(url.lastPathComponent)." : url.lastPathComponent
+            lyricsStatus = parsed.lines.isEmpty
+                ? "Imported lyrics file is empty."
+                : "Lyrics paired from \(url.lastPathComponent)"
         } catch {
             lines = []
-            lyricsStatus = "No paired TTML file found."
-            if FileManager.default.fileExists(atPath: url.path) {
-                errorMessage = "Lyrics could not be parsed: \(error.localizedDescription)"
-            }
+            lyricsStatus = "Imported lyrics could not be parsed."
+            errorMessage = "Lyrics could not be parsed: \(error.localizedDescription)"
         }
     }
 
@@ -148,11 +265,176 @@ final class PlayerViewModel: ObservableObject {
         }
     }
 
-    private func releaseSecurityScopes() {
-        for url in activeURLs {
-            url.stopAccessingSecurityScopedResource()
+    private func refreshLibrary() {
+        ensureLibraryDirectories()
+
+        let audioFiles = ((try? FileManager.default.contentsOfDirectory(at: audioDirectoryURL(), includingPropertiesForKeys: nil)) ?? [])
+            .filter(isSupportedAudioURL(_:))
+            .sorted { $0.lastPathComponent.localizedCaseInsensitiveCompare($1.lastPathComponent) == .orderedAscending }
+
+        libraryTracks = audioFiles.map { audioURL in
+            let baseName = audioURL.deletingPathExtension().lastPathComponent
+            return ImportedTrack(
+                baseName: baseName,
+                title: baseName,
+                audioURL: audioURL,
+                lyricsURL: findLyricsURL(for: baseName)
+            )
         }
-        activeURLs.removeAll()
+
+        if let currentTrackBaseName,
+           let matchingTrack = libraryTracks.first(where: { compareBaseName($0.baseName, currentTrackBaseName) }) {
+            selectedTrackID = matchingTrack.id
+        } else if let existingSelectedTrackID = selectedTrackID,
+                  !libraryTracks.contains(where: { $0.id == existingSelectedTrackID }) {
+            selectedTrackID = nil
+        }
+    }
+
+    private func ensureLibraryDirectories() {
+        let fileManager = FileManager.default
+        try? fileManager.createDirectory(at: audioDirectoryURL(), withIntermediateDirectories: true)
+        try? fileManager.createDirectory(at: lyricsDirectoryURL(), withIntermediateDirectories: true)
+    }
+
+    private func libraryRootURL() -> URL {
+        let applicationSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        return applicationSupport.appendingPathComponent("ImportedMedia", isDirectory: true)
+    }
+
+    private func audioDirectoryURL() -> URL {
+        libraryRootURL().appendingPathComponent("Audio", isDirectory: true)
+    }
+
+    private func lyricsDirectoryURL() -> URL {
+        libraryRootURL().appendingPathComponent("Lyrics", isDirectory: true)
+    }
+
+    private func findLyricsURL(for baseName: String) -> URL? {
+        let preferred = lyricsDirectoryURL().appendingPathComponent("\(baseName).ttml")
+        if FileManager.default.fileExists(atPath: preferred.path) {
+            return preferred
+        }
+
+        let candidates = (try? FileManager.default.contentsOfDirectory(at: lyricsDirectoryURL(), includingPropertiesForKeys: nil)) ?? []
+        return candidates.first {
+            compareBaseName($0.deletingPathExtension().lastPathComponent, baseName)
+        }
+    }
+
+    private func importAudioFile(from externalURL: URL) throws -> URL {
+        let destination = audioDirectoryURL().appendingPathComponent(sanitizedFilename(externalURL.lastPathComponent))
+        return try importFile(from: externalURL, to: destination)
+    }
+
+    private func importFolderContents(from externalFolderURL: URL) throws -> [String] {
+        ensureLibraryDirectories()
+
+        return try withSecurityScopedAccess(to: externalFolderURL) {
+            let fileManager = FileManager.default
+            let enumerator = fileManager.enumerator(
+                at: externalFolderURL,
+                includingPropertiesForKeys: [.isRegularFileKey],
+                options: [.skipsHiddenFiles]
+            )
+
+            var importedAudioBaseNames: [String] = []
+
+            while let fileURL = enumerator?.nextObject() as? URL {
+                let resourceValues = try? fileURL.resourceValues(forKeys: [.isRegularFileKey])
+                guard resourceValues?.isRegularFile == true else {
+                    continue
+                }
+
+                let fileExtension = fileURL.pathExtension.lowercased()
+                if supportedAudioExtensions.contains(fileExtension) {
+                    let destination = audioDirectoryURL().appendingPathComponent(sanitizedFilename(fileURL.lastPathComponent))
+                    _ = try copyFileContents(from: fileURL, to: destination)
+                    importedAudioBaseNames.append(destination.deletingPathExtension().lastPathComponent)
+                } else if fileExtension == "ttml" {
+                    let destination = lyricsDirectoryURL().appendingPathComponent(sanitizedFilename(fileURL.lastPathComponent))
+                    _ = try copyFileContents(from: fileURL, to: destination)
+                }
+            }
+
+            return importedAudioBaseNames.sorted {
+                $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
+            }
+        }
+    }
+
+    private func importSiblingLyricsIfAvailable(for externalAudioURL: URL, baseName: String) throws {
+        guard let siblingLyricsURL = try findSiblingLyricsURL(for: externalAudioURL) else {
+            return
+        }
+
+        let destination = lyricsDirectoryURL().appendingPathComponent("\(baseName).ttml")
+        _ = try importFile(from: siblingLyricsURL, to: destination)
+    }
+
+    private func findSiblingLyricsURL(for externalAudioURL: URL) throws -> URL? {
+        let exactMatch = externalAudioURL.deletingPathExtension().appendingPathExtension("ttml")
+        if try scopedFileExists(at: exactMatch) {
+            return exactMatch
+        }
+
+        let parentDirectoryURL = externalAudioURL.deletingLastPathComponent()
+        let audioBaseName = externalAudioURL.deletingPathExtension().lastPathComponent
+
+        return try withSecurityScopedAccess(to: parentDirectoryURL) {
+            let siblings = (try? FileManager.default.contentsOfDirectory(at: parentDirectoryURL, includingPropertiesForKeys: nil)) ?? []
+            return siblings.first {
+                $0.pathExtension.lowercased() == "ttml" &&
+                compareBaseName($0.deletingPathExtension().lastPathComponent, audioBaseName)
+            }
+        }
+    }
+
+    private func importFile(from externalURL: URL, to destination: URL) throws -> URL {
+        ensureLibraryDirectories()
+
+        return try withSecurityScopedAccess(to: externalURL) {
+            try copyFileContents(from: externalURL, to: destination)
+        }
+    }
+
+    private func copyFileContents(from sourceURL: URL, to destination: URL) throws -> URL {
+        let fileManager = FileManager.default
+        if fileManager.fileExists(atPath: destination.path) {
+            try fileManager.removeItem(at: destination)
+        }
+        try fileManager.copyItem(at: sourceURL, to: destination)
+        return destination
+    }
+
+    private func scopedFileExists(at url: URL) throws -> Bool {
+        try withSecurityScopedAccess(to: url) {
+            FileManager.default.fileExists(atPath: url.path)
+        }
+    }
+
+    private func withSecurityScopedAccess<T>(to url: URL, operation: () throws -> T) throws -> T {
+        let needsScope = url.startAccessingSecurityScopedResource()
+        defer {
+            if needsScope {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+        return try operation()
+    }
+
+    private func sanitizedFilename(_ filename: String) -> String {
+        let invalidCharacters = CharacterSet(charactersIn: "/:\\?%*|\"<>")
+        let cleaned = filename.components(separatedBy: invalidCharacters).joined(separator: "_")
+        return cleaned.isEmpty ? UUID().uuidString : cleaned
+    }
+
+    private func compareBaseName(_ lhs: String, _ rhs: String) -> Bool {
+        lhs.caseInsensitiveCompare(rhs) == .orderedSame
+    }
+
+    private func isSupportedAudioURL(_ url: URL) -> Bool {
+        supportedAudioExtensions.contains(url.pathExtension.lowercased())
     }
 }
 

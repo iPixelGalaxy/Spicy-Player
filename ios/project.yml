@@ -18,15 +18,49 @@ targets:
   SpicyPlayeriOS:
     type: application
     platform: iOS
+    preBuildScripts:
+      - name: Generate App Icons
+        basedOnDependencyAnalysis: false
+        script: |
+          set -euo pipefail
+          ICON_SOURCE="${SRCROOT}/../app/src/main/res/drawable/logo.png"
+          ICON_DIR="${SRCROOT}/SpicyPlayeriOS/Resources/Assets.xcassets/AppIcon.appiconset"
+
+          if [ ! -f "$ICON_SOURCE" ]; then
+            echo "App icon source not found at $ICON_SOURCE"
+            exit 0
+          fi
+
+          mkdir -p "$ICON_DIR"
+          sips -z 40 40 "$ICON_SOURCE" --out "$ICON_DIR/AppIcon-20@2x.png" >/dev/null
+          sips -z 60 60 "$ICON_SOURCE" --out "$ICON_DIR/AppIcon-20@3x.png" >/dev/null
+          sips -z 58 58 "$ICON_SOURCE" --out "$ICON_DIR/AppIcon-29@2x.png" >/dev/null
+          sips -z 87 87 "$ICON_SOURCE" --out "$ICON_DIR/AppIcon-29@3x.png" >/dev/null
+          sips -z 80 80 "$ICON_SOURCE" --out "$ICON_DIR/AppIcon-40@2x.png" >/dev/null
+          sips -z 120 120 "$ICON_SOURCE" --out "$ICON_DIR/AppIcon-40@3x.png" >/dev/null
+          sips -z 120 120 "$ICON_SOURCE" --out "$ICON_DIR/AppIcon-60@2x.png" >/dev/null
+          sips -z 180 180 "$ICON_SOURCE" --out "$ICON_DIR/AppIcon-60@3x.png" >/dev/null
+          sips -z 20 20 "$ICON_SOURCE" --out "$ICON_DIR/AppIcon-20.png" >/dev/null
+          sips -z 40 40 "$ICON_SOURCE" --out "$ICON_DIR/AppIcon-20@2x~ipad.png" >/dev/null
+          sips -z 29 29 "$ICON_SOURCE" --out "$ICON_DIR/AppIcon-29.png" >/dev/null
+          sips -z 58 58 "$ICON_SOURCE" --out "$ICON_DIR/AppIcon-29@2x~ipad.png" >/dev/null
+          sips -z 40 40 "$ICON_SOURCE" --out "$ICON_DIR/AppIcon-40.png" >/dev/null
+          sips -z 80 80 "$ICON_SOURCE" --out "$ICON_DIR/AppIcon-40@2x~ipad.png" >/dev/null
+          sips -z 76 76 "$ICON_SOURCE" --out "$ICON_DIR/AppIcon-76.png" >/dev/null
+          sips -z 152 152 "$ICON_SOURCE" --out "$ICON_DIR/AppIcon-76@2x.png" >/dev/null
+          sips -z 167 167 "$ICON_SOURCE" --out "$ICON_DIR/AppIcon-83.5@2x.png" >/dev/null
+          sips -z 1024 1024 "$ICON_SOURCE" --out "$ICON_DIR/AppIcon-1024.png" >/dev/null
     sources:
       - path: SpicyPlayeriOS/Sources
-    resources:
       - path: SpicyPlayeriOS/Resources
+        buildPhase: resources
     settings:
       base:
+        GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: Spicy Player
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.music
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIFileSharingEnabled: YES
         INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone:
@@ -37,6 +71,7 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS: YES
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_ASSET_PATHS: "\"SpicyPlayeriOS/Resources\""
