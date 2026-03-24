@@ -9,28 +9,58 @@ struct ContentView: View {
         case lyrics
     }
 
+    private enum AppTab: Hashable {
+        case home
+        case library
+        case nowPlaying
+    }
+
     @StateObject private var viewModel = PlayerViewModel()
     @State private var isImporterPresented = false
     @State private var activeImportTarget: ImportTarget?
+    @State private var selectedTab: AppTab = .home
+
+    private var displayedTimeMs: Int {
+        max(0, viewModel.currentTimeMs + viewModel.lyricOffsetMs)
+    }
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .topTrailing) {
             AnimatedArtworkBackground(artwork: viewModel.artwork)
 
-            VStack(spacing: 16) {
-                topBar
-                heroPanel
+            TabView(selection: $selectedTab) {
+                homePage
+                    .tag(AppTab.home)
+                    .tabItem {
+                        Label("Home", systemImage: "house.fill")
+                    }
 
-                if !viewModel.libraryTracks.isEmpty {
-                    libraryPanel
-                }
+                libraryPage
+                    .tag(AppTab.library)
+                    .tabItem {
+                        Label("Library", systemImage: "music.note.list")
+                    }
 
-                lyricsPanel
-                controls
+                nowPlayingPage
+                    .tag(AppTab.nowPlaying)
+                    .tabItem {
+                        Label("Now Playing", systemImage: "quote.bubble.fill")
+                    }
             }
-            .padding(.horizontal, 18)
-            .padding(.top, 18)
-            .padding(.bottom, 20)
+            .tint(.white)
+            .toolbarBackground(.visible, for: .tabBar)
+            .toolbarBackground(.ultraThinMaterial, for: .tabBar)
+            .safeAreaInset(edge: .bottom) {
+                if viewModel.selectedTrackID != nil {
+                    miniPlayerBar
+                        .padding(.horizontal, 14)
+                        .padding(.bottom, 58)
+                }
+            }
+
+            importMenu
+                .padding(.top, 14)
+                .padding(.trailing, 18)
         }
         .fileImporter(
             isPresented: $isImporterPresented,
@@ -50,10 +80,13 @@ struct ContentView: View {
                     switch target {
                     case .audio:
                         await viewModel.importSong(from: url)
+                        selectedTab = .nowPlaying
                     case .folder:
                         await viewModel.importFolder(from: url)
+                        selectedTab = .library
                     case .lyrics:
                         await viewModel.importLyricsForCurrentTrack(from: url)
+                        selectedTab = .nowPlaying
                     case nil:
                         break
                     }
@@ -62,6 +95,86 @@ struct ContentView: View {
                 viewModel.errorMessage = error.localizedDescription
             }
         }
+    }
+
+    private var homePage: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 18) {
+                topBar
+                heroPanel
+                homeQuickActions
+
+                if !viewModel.libraryTracks.isEmpty {
+                    libraryPanel
+                }
+            }
+            .padding(.horizontal, 18)
+            .padding(.top, 24)
+            .padding(.bottom, 120)
+        }
+    }
+
+    private var libraryPage: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack {
+                    Text("Library")
+                        .font(.system(size: 38, weight: .bold))
+                        .foregroundStyle(.white)
+
+                    Spacer()
+
+                    Button {
+                        Task {
+                            await viewModel.shufflePlay()
+                            selectedTab = .nowPlaying
+                        }
+                    } label: {
+                        Label("Shuffle", systemImage: "shuffle")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .background(.ultraThinMaterial, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                Text("\(viewModel.libraryTracks.count) saved tracks")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.56))
+
+                LazyVStack(spacing: 12) {
+                    ForEach(viewModel.libraryTracks) { track in
+                        Button {
+                            Task {
+                                await viewModel.loadTrack(track, autoplay: true)
+                                selectedTab = .nowPlaying
+                            }
+                        } label: {
+                            LibraryListRow(track: track, isActive: viewModel.selectedTrackID == track.id)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .padding(.horizontal, 18)
+            .padding(.top, 24)
+            .padding(.bottom, 120)
+        }
+    }
+
+    private var nowPlayingPage: some View {
+        VStack(spacing: 16) {
+            topBar
+            heroPanel
+            syncSection
+            lyricsPanel
+            controls
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 24)
+        .padding(.bottom, 110)
     }
 
     private var topBar: some View {
@@ -85,8 +198,6 @@ struct ContentView: View {
             }
 
             Spacer(minLength: 0)
-
-            importMenu
         }
     }
 
@@ -137,6 +248,49 @@ struct ContentView: View {
         }
     }
 
+    private var homeQuickActions: some View {
+        HStack(spacing: 12) {
+            Button {
+                Task {
+                    await viewModel.shufflePlay()
+                    selectedTab = .nowPlaying
+                }
+            } label: {
+                LiquidActionTile(title: "Shuffle", systemName: "shuffle")
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                selectedTab = .library
+            } label: {
+                LiquidActionTile(title: "Library", systemName: "square.stack.fill")
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var syncSection: some View {
+        HStack(spacing: 10) {
+            syncButton(title: "-100") {
+                viewModel.adjustLyricOffset(by: -100)
+            }
+
+            syncButton(title: "Reset") {
+                viewModel.resetLyricOffset()
+            }
+
+            syncButton(title: "+100") {
+                viewModel.adjustLyricOffset(by: 100)
+            }
+
+            Spacer()
+
+            Text("Sync \(viewModel.lyricOffsetMs >= 0 ? "+" : "")\(viewModel.lyricOffsetMs) ms")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.white.opacity(0.68))
+        }
+    }
+
     private var heroPanel: some View {
         HStack(spacing: 16) {
             artworkView
@@ -151,7 +305,7 @@ struct ContentView: View {
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(.white.opacity(0.64))
 
-                Text(timecode(viewModel.currentTimeMs))
+                Text(timecode(displayedTimeMs))
                     .font(.system(size: 14, weight: .medium, design: .monospaced))
                     .foregroundStyle(.white.opacity(0.72))
                     .padding(.horizontal, 12)
@@ -167,6 +321,72 @@ struct ContentView: View {
             RoundedRectangle(cornerRadius: 30, style: .continuous)
                 .stroke(.white.opacity(0.10), lineWidth: 1)
         )
+    }
+
+    private var miniPlayerBar: some View {
+        HStack(spacing: 14) {
+            compactArtworkView
+                .onTapGesture {
+                    selectedTab = .nowPlaying
+                }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(viewModel.nowPlayingTitle)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+
+                Text(viewModel.lyricsStatus)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.54))
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
+
+            Button(action: viewModel.togglePlayback) {
+                Image(systemName: viewModel.isPlaying ? "pause.fill" : "play.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 38, height: 38)
+                    .background(.white.opacity(0.14), in: Circle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(.white.opacity(0.10), lineWidth: 1)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .onTapGesture {
+            selectedTab = .nowPlaying
+        }
+    }
+
+    private var compactArtworkView: some View {
+        Group {
+            if let artwork = viewModel.artwork {
+                Image(uiImage: artwork)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                ZStack {
+                    LinearGradient(
+                        colors: [Color.white.opacity(0.18), Color.white.opacity(0.06)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    Image(systemName: "music.note")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.78))
+                }
+            }
+        }
+        .frame(width: 52, height: 52)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     private var artworkView: some View {
@@ -248,7 +468,7 @@ struct ContentView: View {
                         ForEach(viewModel.lines) { line in
                             LyricLineView(
                                 line: line,
-                                currentTimeMs: viewModel.currentTimeMs
+                                currentTimeMs: displayedTimeMs
                             )
                             .id(line.id)
                             .contentShape(Rectangle())
@@ -269,8 +489,8 @@ struct ContentView: View {
                 RoundedRectangle(cornerRadius: 30, style: .continuous)
                     .stroke(.white.opacity(0.08), lineWidth: 1)
             )
-            .onChange(of: viewModel.currentTimeMs, initial: false) { _, _ in
-                guard let activeID = viewModel.activeLineID() else {
+            .onChange(of: displayedTimeMs, initial: false) { _, _ in
+                guard let activeID = viewModel.activeLineID(for: displayedTimeMs) else {
                     return
                 }
 
@@ -296,6 +516,10 @@ struct ContentView: View {
 
     private var controls: some View {
         HStack(spacing: 18) {
+            controlButton(systemName: viewModel.isShuffleEnabled ? "shuffle.circle.fill" : "shuffle") {
+                viewModel.toggleShuffle()
+            }
+
             controlButton(systemName: "backward.fill") {
                 Task {
                     await viewModel.playPreviousTrack()
@@ -323,7 +547,7 @@ struct ContentView: View {
 
             Spacer()
 
-            Text(timecode(viewModel.currentTimeMs))
+            Text(timecode(displayedTimeMs))
                 .font(.system(size: 14, weight: .medium, design: .monospaced))
                 .foregroundStyle(.white.opacity(0.82))
         }
@@ -342,6 +566,22 @@ struct ContentView: View {
                     .foregroundStyle(.white)
             }
             .frame(width: 52, height: 52)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func syncButton(title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
+                .background(.ultraThinMaterial, in: Capsule())
+                .overlay(
+                    Capsule()
+                        .stroke(.white.opacity(0.08), lineWidth: 1)
+                )
         }
         .buttonStyle(.plain)
     }
@@ -400,6 +640,72 @@ private struct LibraryTrackChip: View {
                 : [Color.white.opacity(0.10), Color.white.opacity(0.04)],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
+        )
+    }
+}
+
+private struct LiquidActionTile: View {
+    let title: String
+    let systemName: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Image(systemName: systemName)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(.white)
+
+            Text(title)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.white)
+        }
+        .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
+        .padding(16)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(.white.opacity(0.08), lineWidth: 1)
+        )
+    }
+}
+
+private struct LibraryListRow: View {
+    let track: ImportedTrack
+    let isActive: Bool
+
+    var body: some View {
+        HStack(spacing: 14) {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(.white.opacity(0.12))
+                .frame(width: 54, height: 54)
+                .overlay(
+                    Image(systemName: track.hasLyrics ? "music.note.list" : "music.note")
+                        .foregroundStyle(.white.opacity(0.76))
+                )
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(track.title)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+
+                Text(track.hasLyrics ? "Synced TTML ready" : "Lyrics not attached")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.54))
+            }
+
+            Spacer()
+
+            if isActive {
+                Image(systemName: "play.circle.fill")
+                    .font(.system(size: 22))
+                    .foregroundStyle(.white.opacity(0.82))
+            }
+        }
+        .padding(16)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(isActive ? .white.opacity(0.18) : .white.opacity(0.08), lineWidth: 1)
         )
     }
 }
@@ -551,15 +857,29 @@ private struct InterludeView: View {
     var body: some View {
         let progress = interludeProgress()
 
-        HStack(spacing: 12) {
-            ForEach(0..<3, id: \.self) { index in
-                let phase = progress + (Double(index) * 0.18)
-                Circle()
-                    .fill(Color.white.opacity(0.72))
-                    .frame(width: 10, height: 10)
-                    .scaleEffect(0.72 + 0.55 * pulse(phase))
-                    .opacity(0.35 + 0.65 * pulse(phase))
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                ForEach(0..<3, id: \.self) { index in
+                    let phase = progress + (Double(index) * 0.18)
+                    Circle()
+                        .fill(Color.white.opacity(0.72))
+                        .frame(width: 10, height: 10)
+                        .scaleEffect(0.72 + 0.55 * pulse(phase))
+                        .opacity(0.35 + 0.65 * pulse(phase))
+                }
             }
+
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(.white.opacity(0.10))
+
+                    Capsule()
+                        .fill(.white.opacity(0.72))
+                        .frame(width: max(proxy.size.width * progress, 18))
+                }
+            }
+            .frame(height: 4)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

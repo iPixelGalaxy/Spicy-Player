@@ -147,6 +147,8 @@ private final class ParserDelegate: NSObject, XMLParserDelegate {
             )
         case "span":
             currentParagraph?.pushSpan(attributes: attributeDict)
+        case "br":
+            currentParagraph?.insertLineBreak()
         default:
             break
         }
@@ -161,7 +163,7 @@ private final class ParserDelegate: NSObject, XMLParserDelegate {
             return
         }
 
-        currentParagraph?.consume(text: string)
+        currentParagraph?.appendText(string)
     }
 
     func parser(
@@ -178,7 +180,8 @@ private final class ParserDelegate: NSObject, XMLParserDelegate {
         case "span":
             currentParagraph?.popSpan()
         case "p":
-            if let paragraph = currentParagraph {
+            if var paragraph = currentParagraph {
+                paragraph.flushPendingText()
                 lines.append(contentsOf: paragraph.makeLines())
             }
             currentParagraph = nil
@@ -199,13 +202,14 @@ private struct ParagraphState {
     let agent: String?
     let defaultAgent: String?
 
-    private(set) var leadWords: [LyricWord] = []
+    private(set) var leadLines: [[LyricWord]] = [[]]
     private(set) var backgroundGroups: [[LyricWord]] = []
     private var stack: [ParserDelegate.SpanContext]
     private var previousEndedMidWord = false
     private var currentBackgroundGroup: [LyricWord]?
     private var inBackgroundSpan = false
     private var backgroundPreviousEndedMidWord = false
+    private var pendingText = ""
 
     init(beginMs: Int, endMs: Int, agent: String?, defaultAgent: String?) {
         self.beginMs = beginMs
@@ -216,6 +220,7 @@ private struct ParagraphState {
     }
 
     mutating func pushSpan(attributes: [String: String]) {
+        flushPendingText()
         let inherited = stack.last ?? ParserDelegate.SpanContext(begin: beginMs, end: endMs, isBackground: false)
         let begin = parseTimeMs(attributes["begin"]) ?? inherited.begin
         let end = parseTimeMs(attributes["end"]) ?? inherited.end
@@ -236,6 +241,7 @@ private struct ParagraphState {
             return
         }
 
+        flushPendingText()
         let popped = stack.removeLast()
         let nextIsBackground = stack.last?.isBackground ?? false
         if popped.isBackground && !nextIsBackground {
@@ -249,7 +255,32 @@ private struct ParagraphState {
         }
     }
 
-    mutating func consume(text rawText: String) {
+    mutating func insertLineBreak() {
+        flushPendingText()
+
+        if inBackgroundSpan {
+            if let currentBackgroundGroup, !currentBackgroundGroup.isEmpty {
+                backgroundGroups.append(currentBackgroundGroup)
+                self.currentBackgroundGroup = []
+            }
+            backgroundPreviousEndedMidWord = false
+            return
+        }
+
+        if let currentLine = leadLines.last, !currentLine.isEmpty {
+            leadLines.append([])
+        }
+        previousEndedMidWord = false
+    }
+
+    mutating func appendText(_ rawText: String) {
+        pendingText += rawText
+    }
+
+    mutating func flushPendingText() {
+        let rawText = pendingText
+        pendingText = ""
+
         let context = stack.last ?? ParserDelegate.SpanContext(begin: beginMs, end: endMs, isBackground: false)
         let isBackgroundToken = context.isBackground || inBackgroundSpan
 
@@ -305,7 +336,7 @@ private struct ParagraphState {
 
         for (index, entry) in wordsToAdd.enumerated() {
             let wordStart = start + (index * chunkDuration)
-            let wordEnd = start + ((index + 1) * chunkDuration)
+            let wordEnd = index == wordsToAdd.count - 1 ? end : start + ((index + 1) * chunkDuration)
             let wordDuration = wordEnd - wordStart
             let token = entry.0
             let isLetterGroup = wordDuration >= 1000 && token.count > 1 && token.count <= 12
@@ -318,7 +349,7 @@ private struct ParagraphState {
                     LyricLetter(
                         char: String(character),
                         startMs: wordStart + Int(Double(offset) * letterDuration),
-                        endMs: wordStart + Int(Double(offset + 1) * letterDuration)
+                        endMs: offset == count - 1 ? wordEnd : wordStart + Int(Double(offset + 1) * letterDuration)
                     )
                 }
             } else {
@@ -337,7 +368,10 @@ private struct ParagraphState {
             if isBackgroundToken {
                 currentBackgroundGroup?.append(word)
             } else {
-                leadWords.append(word)
+                if leadLines.isEmpty {
+                    leadLines = [[]]
+                }
+                leadLines[leadLines.count - 1].append(word)
             }
         }
 
@@ -352,18 +386,20 @@ private struct ParagraphState {
         let oppositeAligned = agent != nil && defaultAgent != nil && agent != defaultAgent
         var result: [LyricLine] = []
 
-        result.append(
-            LyricLine(
-                words: leadWords,
-                startMs: beginMs,
-                agent: agent,
-                isBackground: false,
-                oppositeAligned: oppositeAligned,
-                isSongwriter: false,
-                isInterlude: false,
-                interludeEndMs: -1
+        for words in leadLines where !words.isEmpty {
+            result.append(
+                LyricLine(
+                    words: words,
+                    startMs: words.first?.startMs ?? beginMs,
+                    agent: agent,
+                    isBackground: false,
+                    oppositeAligned: oppositeAligned,
+                    isSongwriter: false,
+                    isInterlude: false,
+                    interludeEndMs: -1
+                )
             )
-        )
+        }
 
         for group in backgroundGroups {
             let groupStart = group.first?.startMs ?? beginMs

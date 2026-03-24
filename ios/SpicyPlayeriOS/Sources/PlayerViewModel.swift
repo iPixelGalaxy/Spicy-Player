@@ -346,13 +346,29 @@ final class PlayerViewModel: ObservableObject {
         for item in items {
             let commonKey = item.commonKey?.rawValue.lowercased()
             let identifier = item.identifier?.rawValue.lowercased()
-            let looksLikeArtwork = commonKey == "artwork" || identifier?.contains("artwork") == true
+            let rawKeyDescription = String(describing: item.key ?? "").lowercased()
+            let looksLikeArtwork =
+                commonKey == "artwork" ||
+                identifier?.contains("artwork") == true ||
+                rawKeyDescription.contains("artwork") ||
+                rawKeyDescription.contains("picture") ||
+                rawKeyDescription.contains("cover")
 
             guard looksLikeArtwork else {
                 continue
             }
 
             if let data = try? await item.load(.dataValue), let image = UIImage(data: data) {
+                return image
+            }
+
+            if let data = item.value as? Data, let image = UIImage(data: data) {
+                return image
+            }
+
+            if let encoded = item.stringValue,
+               let data = Data(base64Encoded: encoded),
+               let image = UIImage(data: data) {
                 return image
             }
         }
