@@ -2,6 +2,8 @@
 
 Spicy Player is an offline music player for Android with a port/recreation of [Spicy Lyrics](https://github.com/Spikerko/spicy-lyrics) - A [Spicetify](https://spicetify.app/) Extension, designed to achieve **visual parity** with Spicy Lyrics' rendering. Built using **Jetpack Compose (Canvas API)** and **ExoPlayer**.
 
+This repo also includes an **iOS SwiftUI app target** under [ios/project.yml](ios/project.yml). The iOS version keeps the same local-file workflow: load an audio file, automatically pair a same-name `.ttml` file beside it, then render synchronized lyrics during playback.
+
 > [!WARNING]
 > This is a work in progress. The app is not yet complete and may have bugs.
 
@@ -78,6 +80,28 @@ A stateful XML parser that:
 - **Media3 (ExoPlayer)**: Industrial-grade media decoding and playback.
 - **Kotlin Coroutines**: For non-blocking IO during TTML and audio file scanning.
 - **Custom XML Pull Parser**: For lightweight, low-memory performance on large lyric files.
+- **SwiftUI + AVFoundation**: For the iOS player, local file importing, and synchronized lyric rendering.
+
+## Manual Builds
+
+GitHub Actions includes a manual workflow at [.github/workflows/build-mobile.yml](.github/workflows/build-mobile.yml).
+
+- `platform`: build `android`, `ios`, or `both`
+- `android_variant`: build `Debug` or `Release`
+- `ios_export`: export a signed `ipa` or an unsigned `simulator-app`
+- `ios_export_method`: choose `development`, `ad-hoc`, or `app-store` for IPA exports
+
+### iOS Signing Secrets
+
+IPA export requires these GitHub repository secrets:
+
+- `IOS_CERTIFICATE_P12_BASE64`
+- `IOS_CERTIFICATE_PASSWORD`
+- `IOS_PROVISIONING_PROFILE_BASE64`
+- `IOS_TEAM_ID`
+- `IOS_SIGNING_IDENTITY`
+
+The workflow generates the Xcode project from [ios/project.yml](ios/project.yml) using XcodeGen on the macOS runner, then archives and exports the app.
 
 ## License
 
