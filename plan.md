@@ -1,30 +1,86 @@
-# Spicy Player Work Breakdown
-
-- Lyrics aspect
-  - [x] TTML parser
-  - [x] Compose lyrics list
-  - [x] Word renderer
-  - [x] Smooth scroll with inertia
-  - [x] Tap to seek
-  - [x] 3 Dots Interlude indicator
-  - [x] Dynamic Background
-  - [ ] Landscape view
-  - [ ] Fix held word animation
-- Audio player aspect
-  - [x] ExoPlayer
-  - [ ] Folder scanner + auto-pairing
-    - [ ] Implement file picker to scan `/Music/` directory
-    - [x] Auto-pair `.flac` and `.ttml` files based on name
-  - [ ] UI (similar to Musicolet)
-    - [ ] Library
-    - [ ] Queue
-    - [ ] Now Playing
-    - [ ] Spectrum viz + controls
-- Settings
-  - [ ] Lyrics settings
-  - [ ] Audio player settings
-  - [ ] General settings
-- [ ] Polish and Bug hunting
-  - [x] App icon
-  - [ ] Verify FLAC gapless playback (Concat adapter)
-  - [ ] Final performance optimizations (60fps target)
+- Features
+  - Lyrics aspect
+    - [x] TTML parser
+    - [x] Compose lyrics list
+    - [x] Word renderer
+    - [x] Smooth scroll with inertia
+    - [x] Tap to seek
+    - [x] 3 Dots Interlude indicator
+    - [x] Dynamic Background
+    - [ ] Romanization
+    - [ ] Translation (?)
+    - [ ] Landscape view
+      - [ ] Split screen layout with cover art/controls on the left and scrolling lyrics on the right
+    - [ ] Fixes
+      - [ ] Resolve overlapping text issues during fast sections or duets
+      - [ ] Improve parser resilience for malformed `.ttml` files to prevent crashes
+  - Audio player aspect
+    - [x] ExoPlayer
+    - [x] Folder scanner + auto-pairing
+      - [x] Implement file picker to scan `/Music/` directory
+        - [x] Use Android Storage Access Framework (SAF) for scoped storage compliance
+        - [x] Background service for scanning with a progress notification
+      - [x] Auto-pair `.flac` and `.ttml` files based on name
+    - [ ] Implement MediaSession for song info broadcasting
+    - [ ] UI
+      - [ ] Introduction screen
+        - [ ] Greeting
+        - [ ] Tutorial
+        - [ ] Select folder to scan
+        - [x] Show progress of scanning
+      - [ ] Library
+        - [ ] Categorized tabs: Albums, Artists, Songs, Folders, and Playlists
+        - [ ] Grid view for Albums/Artists with fast-scroll alphabet indexer on the right edge
+      - [ ] Queue
+        - [ ] Drag-and-drop to reorder tracks
+        - [ ] Swipe left/right to remove a track from the queue
+        - [ ] Sleep timer
+      - [x] Now Playing
+        - [ ] Swipe horizontally to skip to previous/next track
+        - [ ] Tap album cover to show/hide lyrics overlay or toggle full-screen cover
+        - [x] Controls
+          - [ ] Advanced controls
+        - [x] Progress bar
+        - [x] Cover art and track info
+          - [ ] Auto expand cover art and track info to middle if no TTML is found
+            - [ ] Use `animateContentSize` or `updateTransition` in Compose for a smooth centering animation
+          - [x] Scrolling track info if too long
+      - [ ] Spectrum visualization
+        - [ ] Fetch audio session ID from ExoPlayer to drive visualizer data
+        - [ ] Multiple visualizer styles (e.g., bar graph, waveform, circular aura around cover art)
+  - Settings
+    - [x] Lyrics settings
+      - [x] Global offset/delay adjustment (e.g., ±500ms) for out-of-sync lyrics
+      - [x] Custom font size
+    - [x] Audio player settings
+      - [x] Equalizer (EQ) preset selection and Bass Boost toggle
+        - [ ] *TODO* Musicolet-like EQ
+      - [x] Crossfade duration slider (0-10 seconds) and gapless playback toggle
+    - [x] General settings
+      - [x] App theme selector (Light, Dark, System Default, Material You)
+      - [x] Cache management (clear cached images/lyrics to free up space)
+      - [x] Keep screen on
+      - [x] Scan directory
+      - [x] Audio focus mode
+      - [x] Rescan library
+        - [ ] Cache scanned and matched
+    - [x] Reset to defaults
+- Bugs
+  - [ ] RTL Languages
+    - [ ] Ensure the Word renderer calculates layout widths properly from right to left
+    - [ ] Mirror the scroll direction metrics for RTL text in the lyrics list
+    - [ ] Flip gradient scan direction
+    - [ ] Turn off held word animation
+  - [ ] Held word animation
+    - [ ] Slower anims look fine but faster anims look weird
+  - [x] Audio focus handling
+  - [ ] Bluetooth/general audio delay fix
+  - [ ] 3 Dots interlude BG line spacings
+  - [x] Previous song
+  - [x] Seeking doesn't move lyrics view
+  - [x] BG Blur and timing offset have too many steps/circles in slider
+  - [x] Fix scan directory setting
+  - [x] Custom EQ doesn't work
+  - [x] Transition/animation between settings pages
+  - [ ] Performance improvements
+  - [ ] Fix logo sizing in some places like toasts

@@ -32,7 +32,8 @@ object TtmlLyricsParser {
     fun parse(inputStream: InputStream): ParsedLyrics {
         val parser = Xml.newPullParser()
         parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, true)
-        parser.setInput(InputStreamReader(inputStream))
+        val reader = inputStream.reader(Charsets.UTF_8)
+        parser.setInput(reader)
 
         val lines = mutableListOf<Line>()
         val songwriters = mutableListOf<String>()
@@ -105,7 +106,7 @@ object TtmlLyricsParser {
         }
 
         // Inject instrumental interlude placeholders for significant gaps (>= 3s) between main lines.
-        val mainLines = lines.filter { !it.isBackground && !it.isSongwriter }
+        val mainLines = lines.filter { !it.isSongwriter }
             .sortedBy { it.startMs }
         val interludes = mutableListOf<Line>()
         for (i in 0 until mainLines.size - 1) {

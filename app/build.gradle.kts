@@ -6,18 +6,28 @@ plugins {
 
 android {
     namespace = "com.tx24.spicyplayer"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.tx24.spicyplayer"
         minSdk = 26
-        targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        targetSdk = 35
+        versionCode = 2
+        versionName = "Spicy Player Alpha v0.2"
+    }
+
+    signingConfigs {
+        create("release") {
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+            storeFile = file(System.getProperty("user.home") + "/.android/debug.keystore")
+            storePassword = "android"
+        }
     }
 
     buildTypes {
         release {
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -34,6 +44,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -45,15 +56,28 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
-    implementation("androidx.compose.material3:material3")
+    // Use alpha for Expressive APIs
+    implementation("androidx.compose.material3:material3:1.4.0-alpha06")
     
     // ExoPlayer
     implementation("androidx.media3:media3-exoplayer:1.3.1")
     implementation("androidx.media3:media3-session:1.3.1")
     implementation("androidx.media3:media3-ui:1.3.1")
 
+    // Palette for dynamic color from cover art
+    implementation("androidx.palette:palette-ktx:1.0.0")
+
+    // Extended Material Icons for player controls
+    implementation("androidx.compose.material:material-icons-extended")
+
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+
+    // DataStore for settings persistence
+    implementation("androidx.datastore:datastore-preferences:1.1.1")
+
+    // ViewModel + Compose integration
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

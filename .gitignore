@@ -4,6 +4,6 @@ gradle/
 .vscode/
 spicy-lyrics/
 build_output.log
-bbno$ - come to brazil.ttml
 build/
 .kotlin/
+.agents/
